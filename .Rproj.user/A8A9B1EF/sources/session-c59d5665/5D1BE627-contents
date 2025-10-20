@@ -1,4 +1,4 @@
-# Load Packages
+# Load required packages
 library(sf)
 library(tidyverse)
 library(tigris)
@@ -9,9 +9,6 @@ library(here)
 library(dplyr)
 library(knitr)
 library(ggplot2)
-
-# Property / Sales Data
-property_sales <- st_read("https://phl.carto.com/api/v2/sql?filename=opa_properties_public&format=geojson&skipfields=cartodb_id&q=SELECT+*+FROM+opa_properties_public")
 
 # Load Census Data
 philadelphia <- get_acs(
@@ -24,7 +21,7 @@ philadelphia <- get_acs(
   output = "wide"
 )
 
-# Load Spatial Amentities Data
+# Load spatial amentities data
 park_properties <- st_read("https://hub.arcgis.com/api/v3/datasets/d52445160ab14380a673e5849203eb64_0/downloads/data?format=geojson&spatialRefId=4326&where=1%3D1")
 hospitals <- st_read("https://opendata.arcgis.com/datasets/df8dc18412494e5abbb021e2f33057b2_0.geojson")
 farmers_markets <- st_read("https://hub.arcgis.com/api/v3/datasets/0707c1f31e2446e881d680b0a5ee54bc_0/downloads/data?format=geojson&spatialRefId=4326&where=1%3D1")
@@ -39,3 +36,4 @@ farmers_markets <- st_transform(farmers_markets, crs = 3365)
 schools <- st_transform(schools, crs = 3365)
 landmarks <- st_transform(landmarks, crs = 3365)
 bike_network <- st_transform(bike_network, crs = 3365)
+
