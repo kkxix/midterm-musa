@@ -48,6 +48,7 @@ property_sales_res <- as.data.frame(lapply(property_sales_res, function(x) {
 colSums(is.na(property_sales_res))
 
 # Load Census Data
+census_api_key("5a82e243438bea307ae1c04f150d539c4db5fa47", install = FALSE)
 philadelphia <- get_acs(
   geography = "tract",
   county = "Philadelphia",
@@ -161,6 +162,54 @@ res_properties_sf <- res_properties_sf %>%
     nearest_fmarket_mi = nearest_fmarket/5280
   )
 
+#4 Join landmark data - what is the distance to the nearest landmark?
+
+# Calculate distance matrix (properties to landmarks)
+dist_matrix_landmark <- st_distance(res_properties_sf, landmarks)
+
+# Function to get nearest distance
+landmark_distance <- function(dist_matrix_landmark, k) {
+  apply(dist_matrix_landmark, 1, function(distances) {
+    # Sort and take first k, then average
+    mean(as.numeric(sort(distances)[1:k]))
+  })
+}
+
+# Add nearest landmark distance as a column
+res_properties_sf <- res_properties_sf %>%
+  mutate(
+    nearest_landmark = landmark_distance(dist_matrix_landmark, k = 1))
+
+# landmark distance in miles
+res_properties_sf <- res_properties_sf %>%
+  mutate(
+    nearest_landmark_mi = nearest_landmark/5280
+  )
+
+#5 Join school data - what is the distance to the nearest school?
+
+# Calculate distance matrix (properties to schools)
+dist_matrix_school <- st_distance(res_properties_sf, schools)
+
+# Function to get nearest distance
+school_distance <- function(dist_matrix_school, k) {
+  apply(dist_matrix_school, 1, function(distances) {
+    # Sort and take first k, then average
+    mean(as.numeric(sort(distances)[1:k]))
+  })
+}
+
+# Add nearest farmer's market distance as a column
+res_properties_sf <- res_properties_sf %>%
+  mutate(
+    nearest_school = school_distance(dist_matrix_school, k = 1))
+
+# market distance in miles
+res_properties_sf <- res_properties_sf %>%
+  mutate(
+    nearest_school_mi = nearest_school/5280
+  )
+
 #PHASE 2: EXPLORATORY DATA ANALYSIS - DATA VISUALIZATIONS
 
 #1 Geographic Distribution (Map)
@@ -255,5 +304,107 @@ ggplot(
     y = "Sale Price (USD)"
   ) +
   theme_minimal()
+
+
+#PHASE 3: FEATURE ENGINEERING
+
+# some of these aren't spatial - i was playing around with what i could do and didn't want to delete in case they would be helpful in the future
+
+# price per bedroom
+res_properties_sf <- res_properties_sf %>%
+  mutate(
+    price_per_bedroom = sale_price_n/number_of_bedrooms,
+  )
+
+# home costs relative to income
+# lower ratio = affordable housing, higher ratio = expensive housing
+res_properties_sf <- res_properties_sf %>%
+    mutate(
+      price_to_income = sale_price_n / median_h_incomeE
+    )
+
+# affordability measure
+# lower score = housing is more affordable, higher score = housing is less affordable
+res_properties_sf <- res_properties_sf %>%
+  mutate(
+    affordability = median_h_incomeE / sale_price_n
+  )
+
+# converting nearest_park to have miles
+res_properties_sf <- res_properties_sf %>%
+  mutate(
+    nearest_park_mi = nearest_park / 5280
+  )
+
+# access index
+# lower score = worse access, higher score = better access
+res_properties_sf <- res_properties_sf %>%
+  mutate(
+    access_index = ( 1 / nearest_park_mi) + (1 / nearest_hospital_mi) + (1 / nearest_fmarket_mi) + (1/nearest_landmark_mi) + (1/nearest_school_mi)
+  )
+
+# buffers
+property_buffers <- st_buffer(
+  res_properties_sf, dist = 0.5 * 5280
+)
+
+res_properties_sf <- res_properties_sf %>%
+  mutate(
+    n_parks_near = lengths(st_intersects(property_buffers, park_properties)),
+    n_schools_near = lengths(st_intersects(property_buffers, schools)),
+    n_fmarkets_near = lengths(st_intersects(property_buffers, farmers_markets)),
+    n_hospitals_near = lengths(st_intersects(property_buffers, hospitals)),
+    n_landmarks_near = lengths(st_intersects(property_buffers, landmarks))
+  )
+
+
+#PHASE 4: MODEL BUILDING
+
+# convert variables to numeric for later
+res_properties_sf <- res_properties_sf %>%
+  mutate(total_livable_area = as.numeric(total_livable_area))
+
+res_properties_sf <- res_properties_sf %>%
+  mutate(number_of_bathrooms = as.numeric(number_of_bathrooms))
+
+# log to reduce skew - compresses large values to make more symmetrical  
+res_properties_sf <- res_properties_sf %>%
+  mutate(log_price = log(sale_price_n))
+
+# structural features
+structural_features <- res_properties_sf %>%
+  select(log_price, number_of_bedrooms, number_of_bathrooms,total_livable_area)
+
+# census variables features
+census_features <- res_properties_sf %>%
+  select(log_price, number_of_bedrooms, number_of_bathrooms,total_livable_area, 
+         median_h_incomeE, total_populationE)
+
+# spatial features
+spatial_features <- res_properties_sf %>%
+  select(log_price, number_of_bedrooms, number_of_bathrooms,total_livable_area, 
+         median_h_incomeE, total_populationE, 
+         nearest_park_mi, nearest_hospital_mi, nearest_fmarket_mi, nearest_landmark_mi, nearest_school_mi, 
+         n_parks_near, n_schools_near, n_fmarkets_near, n_hospitals_near, n_landmarks_near, access_index)
+
+# structural model
+structural_model <- lm(log_price ~ number_of_bedrooms + number_of_bathrooms + total_livable_area,
+                       data = res_properties_sf)
+
+# census model
+census_model <- lm(log_price ~ number_of_bedrooms + number_of_bathrooms + total_livable_area + 
+                   median_h_incomeE + total_populationE,
+                   data = res_properties_sf)
+
+# spatial model
+spatial_model <- lm(log_price ~ number_of_bedrooms + number_of_bathrooms + total_livable_area + 
+                    median_h_incomeE + total_populationE +
+                    nearest_park_mi + nearest_hospital_mi + nearest_fmarket_mi + nearest_landmark_mi + nearest_school_mi + 
+                    n_parks_near + n_schools_near + n_fmarkets_near + n_hospitals_near + n_landmarks_near + access_index,
+                    data = res_properties_sf)
+
+summary(structural_model)
+summary(census_model)
+summary(spatial_model)
 
 # 5 Creative Visualization
