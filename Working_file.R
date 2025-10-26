@@ -100,6 +100,30 @@ philadelphia <- philadelphia %>%
 
 res_properties_sf <- st_join(res_properties_sf, philadelphia %>% select(median_h_incomeE, total_populationE), left = TRUE)
 
+# DATA CLEANING SUMMARY
+# Make Summary tables showing before and after data cleaning
+
+before_summary <- tibble(
+  Summary = "Raw data",
+  Rows = nrow(property_sales),
+  Columns = ncol(property_sales)
+)
+
+after_summary <- tibble(
+  Summary = "Cleaned data",
+  Rows = nrow(res_properties_sf),
+  Columns = ncol(res_properties_sf)
+)
+
+# Combine into one summary table
+summary_table <- bind_rows(before_summary, after_summary)
+
+#Narrative: 
+# The dataset initially had 583,776 properties. First we filtered properties based on their zoning code, only keeping those which were residential or 'IRMX,' meaning Industrial Residential Mixed Use. 
+#Then to further ensure that we had only residential entries, we filtered for entries that had a category code of single family, multi family, or mixed use. 
+# To remove any egregious outliers we removed properties whose sale price was less than $5000 or greater than $10000000. Finally, we only kept sales that occurred in 2023 or 2024. Blank cells were recoded as 'NA.'
+# The cleaned dataset had 27357 lines.
+
 # Join Spatial Amenities Data
 
 # 1. Join parks data - What is the distance to the nearest park?
@@ -227,12 +251,14 @@ res_properties_sf <- res_properties_sf %>%
 # Map of Sale Prices
 ggplot(res_properties_sf) +
   geom_sf(aes(color = sale_price_n), size = 1, alpha = 0.7) +
-  scale_color_viridis_c(option = "plasma", labels = scales::dollar) +
+  scale_color_viridis_c(option = "turbo", labels = scales::dollar) +
   labs(
     title = "Distribution of Home Prices in Philadelphia",
     color = "Home Price"
   ) +
   theme_minimal()
+
+###Interpretation: This map visualizes residential property sales across Philadelphia during 2023–2024, with each point representing a single sale and color indicating the sale price. The full range of values is very hard to see on this map because while there is a large range of values, going beyond $8 million, most of them fall on the much lower end of the spectrum. This causes the map to appear mostly one uniform shade of navy blue. A number of higher valued properties (shown in light blue and representing homes just under $2 million) can be seen clustered in northwest Philadelphia and around center city.  
 
 # Map of Sale Prices - Log Transformed
 ggplot() +
@@ -250,6 +276,8 @@ ggplot() +
   ) +
   theme_minimal()
 
+### Interpretation: This map visualizes residential property sales across Philadelphia during 2023–2024, with each point representing a single sale and color indicating the sale price on a logarithmic scale. Using a log scale allows for clearer visualization of the wide range of property values, compressing extremely high prices while preserving overall spatial variation. The pattern reveals clear geographic differences in housing markets: higher sale prices (yellow to orange) are concentrated in central and northwestern neighborhoods—such as Center City, University City, and Chestnut Hill—while lower prices (purple) are more common in much of North and Southwest Philadelphia. These spatial patterns highlight the city’s pronounced housing value disparities, reflecting broader socioeconomic divides. They also show potential gentrification pressures in the areas where low- and mid-priced neighborhoods intersect.
+
 #2 Distribution of Sale Prices (Histogram)
 
 ggplot(res_properties_sf, aes(x = sale_price_n)) +
@@ -263,6 +291,8 @@ ggplot(res_properties_sf, aes(x = sale_price_n)) +
   ) +
   theme_minimal()
 
+### Interpretation: This histogram illustrates the distribution of residential property sale prices in Philadelphia for the years 2023–2024. The data are highly right-skewed, meaning most properties sold at relatively low prices, while a small number of transactions occurred at very high prices. The vast majority of sales cluster below about $500,000, with a sharp peak near the lower end of the price range. Only a few properties sold for prices above $1 million, indicating that such high-value transactions are rare.
+
 # Sale Prices Histogram - Log Transformed
 ggplot(res_properties_sf, aes(x = sale_price_n)) +
   geom_histogram(bins = 40, fill = "darkorange", color = "white", alpha = 0.8) +
@@ -274,6 +304,8 @@ ggplot(res_properties_sf, aes(x = sale_price_n)) +
     y = "Number of Properties"
   ) +
   theme_minimal()
+
+### Interpretation: This histogram displays the distribution of residential sale prices in Philadelphia (2023–2024) on a logarithmic scale, which makes the skewed price data easier to interpret. The distribution appears roughly bell-shaped, indicating that the underlying price data follow a log-normal distribution. Most residential properties sold for between $100,000 and $1,000,000, forming the central peak of the distribution. Fewer homes sold at very low or very high prices, shown by the tapering tails on both sides.
 
 #3 Price vs. Structural Features - Scatter Plot
 # Price vs. Number of Bedrooms
@@ -295,6 +327,8 @@ ggplot(
   ) +
   theme_minimal()
 
+###Interpretation: The scatter plot shows the relationship between the number of bedrooms in residential properties and their sale prices in Philadelphia for 2023 and 2024. The trend line does indicate a general upward trajectory, suggesting that sale prices tend to increase as the number of bedrooms increases. At the same time, the data shows a wide range of sale prices within each bedroom category, indicating that other factors such as neighborhood location, property condition, amenities, and lot size also have a large influence on overall value. In each bedroom category, most of the properties are valued below $2,000,000. ere There are also many high outliers in each category, meaning that for luxury properties the number of bedrooms is not highly associated with the value. Also, beyond 6 bedrooms, the sale prices begin to taper off, suggesting that at that point additional bedrooms have a diminishing return. 
+
 # 4 Price vs. Spatial Features - Scatter Plot
 # Price vs. Distance to Nearest Farmer's Market
 
@@ -312,6 +346,64 @@ ggplot(
   ) +
   theme_minimal()
 
+### Interpretation: The scatter plot shows the relationship between the distance to the nearest farmers’ market and the sale price. The highest valued properties are clustered within 1 mile from a market. Beyond 2 miles, the values fall sharply. This suggests that proximity to farmers markets does to some degree play a role in sale value. However, it is almost important to note that there is a very wide range or properties within 1 mile. Overall this graphic is most revealing about the proximity of high end properties to farmers markets. 
+
+#5 Creative Visualization
+# Chloropleth Map of Median Prices and Median Income
+
+tract_level_data <- res_properties_sf %>%
+  st_drop_geometry() %>%  # remove geometry for calculation
+  group_by(census_tract) %>%
+  summarize(
+    median_price = median(sale_price_n, na.rm = TRUE),
+    median_income = median(median_h_incomeE, na.rm = TRUE) # ensures tract-level summary
+  )
+
+tract_level_data <- tract_level_data %>%
+  mutate(census_tract = as.numeric(census_tract))
+
+tracts_merged <- philadelphia %>%
+  left_join(tract_level_data, by = c("census_tract"))
+
+tracts_merged <- tracts_merged %>%
+  mutate(
+    income_cat = cut(median_income,
+                     breaks = quantile(median_income, probs = seq(0, 1, 0.33), na.rm = TRUE),
+                     include.lowest = TRUE, labels = c("Low Income", "Medium Income", "High Income")),
+    price_cat = cut(median_price,
+                    breaks = quantile(median_price, probs = seq(0, 1, 0.33), na.rm = TRUE),
+                    include.lowest = TRUE, labels = c("Low Price", "Medium Price", "High Price")),
+    bivariate_cat = interaction(income_cat, price_cat, sep = "-")
+  )
+
+# Define bivariate color palette
+bivariate_colors <- c(
+  "Low Income-Low Price"     = "#e8e8e8",
+  "Medium Income-Low Price"  = "#ace4e4",
+  "High Income-Low Price"    = "#5ac8c8",
+  "Low Income-Medium Price"  = "#dfb0d6",
+  "Medium Income-Medium Price" = "#a5add3",
+  "High Income-Medium Price" = "#5698b9",
+  "Low Income-High Price"    = "#be64ac",
+  "Medium Income-High Price" = "#8c62aa",
+  "High Income-High Price"   = "#3b4994"
+)
+
+ggplot(tracts_merged) +
+  geom_sf(aes(fill = bivariate_cat), color = NA) +
+  scale_fill_manual(values = bivariate_colors, name = "Income vs Price",
+                    guide = guide_legend(title.position = "top", ncol = 1)) +
+  labs(
+    title = "Bivariate Choropleth Map of Property Values and Median Income",
+    subtitle = "Census Tracts in Philadelphia (2023–2024)",
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 10, face = "bold"),
+    legend.position = "right"
+  )
+
+### Interpretation: This is a bivariate choropleth map of median home values and median income by census tract in Philadelphia. Median home values and median income were broken into tertiles. This shows that high-income, high-price areas are highly clustered in northwest Philadelphia, but also close to center city, university city, and in parts of the northeast. Low-income, low-price areas are found in the west and southwest, the north, and the northeast. These would indicate underfunded areas. The low-income, high price areas could represent areas that are quickly gentrifying. Low income residents here are at risked of getting pushed out of these neighborhoods. 
 
 #PHASE 3: FEATURE ENGINEERING
 
@@ -379,8 +471,6 @@ res_properties_sf <- res_properties_sf %>%
 #create categorical variables 
 res_properties_sf$quality_grade <- as.factor(res_properties_sf$quality_grade)
 res_properties_sf$category_code <- as.factor(res_properties_sf$category_code)
-
-res_properties_sf <- res_properties_sf %>%
 
 # log to reduce skew - compresses large values to make more symmetrical  
 res_properties_sf <- res_properties_sf %>%
