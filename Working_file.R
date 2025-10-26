@@ -8,11 +8,15 @@ library(patchwork)
 library(here)
 library(dplyr)
 library(knitr)
+library(kableExtra)
 library(ggplot2)
 library(stringr)
 library(units)
 library(stargazer)
 library(car)
+library(caret)
+library(lmtest)
+
 
 #PHASE 1: DATA PREPARATION
 
@@ -368,7 +372,8 @@ res_properties_sf <- res_properties_sf %>%
   mutate(total_livable_area = as.numeric(total_livable_area),
          number_of_bathrooms = as.numeric(number_of_bathrooms),
          frontage = as.numeric(frontage),
-         fireplaces = as.numeric(fireplaces)
+         fireplaces = as.numeric(fireplaces),
+         year_built = year_built
          )
 
 #create categorical variables 
@@ -418,7 +423,7 @@ spatial_model <- lm(log_price ~ number_of_bedrooms + number_of_bathrooms + total
 
 fixed_effects_interation_model <- lm(log_price ~ number_of_bedrooms + number_of_bathrooms + 
                                        total_livable_area * median_h_incomeE + 
-                                       as.numeric(year_built)*median_h_incomeE + 
+                                       year_built*median_h_incomeE + 
                             fireplaces + total_populationE + price_to_income+
                             nearest_park_mi + nearest_hospital_mi + nearest_fmarket_mi + nearest_landmark_mi + nearest_school_mi + 
                             n_parks_near + n_schools_near + n_fmarkets_near + n_hospitals_near + n_landmarks_near + access_index +
@@ -441,7 +446,128 @@ stargazer(structural_model, census_model, spatial_model, fixed_effects_interatio
 
 ### Phase 5: Model Validation
 
-**Use 10-fold cross-validation:**
-  - Compare all 4 models
-- Report RMSE, MAE, R² for each
-- Create predicted vs. actual plot
+train_control <- trainControl(method = "cv", number = 10)
+
+cv.mod.1 <- train(log_price ~ number_of_bedrooms + number_of_bathrooms + total_livable_area
+                  + fireplaces,
+                  data = res_properties_sf,
+                  method = "lm",
+                  trControl = train_control,
+                  na.action = na.omit)
+
+cv.mod.2 <- train(log_price ~ number_of_bedrooms + number_of_bathrooms + total_livable_area + 
+                    fireplaces + median_h_incomeE + total_populationE +price_to_income,
+                  data = res_properties_sf,
+                  method = "lm",
+                  trControl = train_control,
+                  na.action = na.omit)
+
+cv.mod.3 <- train(log_price ~ number_of_bedrooms + number_of_bathrooms + total_livable_area + 
+                    fireplaces + median_h_incomeE + total_populationE + price_to_income+
+                    nearest_park_mi + nearest_hospital_mi + nearest_fmarket_mi + nearest_landmark_mi + nearest_school_mi + 
+                    n_parks_near + n_schools_near + n_fmarkets_near + n_hospitals_near + n_landmarks_near + access_index,
+                  data = res_properties_sf,
+                  method = "lm",
+                  trControl = train_control,
+                  na.action = na.omit)
+
+cv.mod.4 <- train(log_price ~ number_of_bedrooms + number_of_bathrooms + 
+                    total_livable_area * median_h_incomeE + 
+                    year_built*median_h_incomeE + 
+                    fireplaces + total_populationE + price_to_income+
+                    nearest_park_mi + nearest_hospital_mi + nearest_fmarket_mi + nearest_landmark_mi + nearest_school_mi + 
+                    n_parks_near + n_schools_near + n_fmarkets_near + n_hospitals_near + n_landmarks_near + access_index +
+                    category_code,
+                  data = res_properties_sf,
+                  method = "lm",
+                  trControl = train_control,
+                  na.action = na.omit)
+
+cv.mod.1$results
+cv.mod.2$results
+cv.mod.3$results
+cv.mod.4$results
+
+#table of models' stats
+metrics_mod1 <- cv.mod.1$results[1, c("RMSE", "Rsquared", "MAE")]
+metrics_mod1$model <- "Structural Model"
+
+metrics_mod2 <- cv.mod.2$results[1, c("RMSE", "Rsquared", "MAE")]
+metrics_mod2$model <- "Structural + Census Model"
+
+metrics_mod3 <- cv.mod.3$results[1, c("RMSE", "Rsquared", "MAE")]
+metrics_mod3$model <- "Structural + Census + Spatial Model"
+
+metrics_mod4 <- cv.mod.4$results[1, c("RMSE", "Rsquared", "MAE")]
+metrics_mod4$model <- "Structural + Census + Spatial + Fixed Effects & Interactions Model"
+
+metrics_table <- bind_rows(metrics_mod1, metrics_mod2, metrics_mod3, metrics_mod4)
+
+kable(metrics_table, "html") %>%
+  kable_styling(full_width = FALSE)
+
+#plot fit vs residuals####
+resid.1 <- data.frame(
+  fitted = fitted(cv.mod.1$finalModel),
+  residuals = resid(cv.mod.1$finalModel)
+)
+
+ggplot(resid.1, aes(x = fitted, y = residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Residual Plot", x = "Fitted Values", y = "Residuals") +
+  theme_minimal()
+
+resid.2 <- data.frame(
+  fitted = fitted(cv.mod.2$finalModel),
+  residuals = resid(cv.mod.2$finalModel)
+)
+
+ggplot(resid.2, aes(x = fitted, y = residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Residual Plot", x = "Fitted Values", y = "Residuals") +
+  theme_minimal()
+
+
+resid.3 <- data.frame(
+  fitted = fitted(cv.mod.3$finalModel),
+  residuals = resid(cv.mod.3$finalModel)
+)
+
+ggplot(resid.3, aes(x = fitted, y = residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Residual Plot", x = "Fitted Values", y = "Residuals") +
+  theme_minimal()
+
+
+resid.4 <- data.frame(
+  fitted = fitted(cv.mod.4$finalModel),
+  residuals = resid(cv.mod.4$finalModel)
+)
+
+ggplot(resid.4, aes(x = fitted, y = residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Residual Plot", x = "Fitted Values", y = "Residuals") +
+  theme_minimal()
+
+#plot fitted on map to see location of outliers
+
+preds <- predict(cv.mod.4, newdata = res_properties_sf)
+res_properties_sf$fitted <- NA_real_
+res_properties_sf$residuals <- NA_real_
+res_properties_sf$fitted[as.numeric(names(preds))] <- preds
+res_properties_sf$residuals[as.numeric(names(preds))] <- res_properties_sf$log_price[as.numeric(names(preds))] - preds
+
+res_properties_sf%>%
+filter(!is.na(residuals))%>%
+ggplot() +
+  geom_sf(aes(color = residuals), alpha=.5)+
+  scale_color_gradient2(
+    low = "red", mid = "gray", high = "green", midpoint = 0,
+    name = "Residual (log-price)"
+  ) +
+  theme_void()
+
