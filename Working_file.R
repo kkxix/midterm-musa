@@ -253,7 +253,7 @@ ggplot(res_properties_sf) +
   geom_sf(aes(color = sale_price_n), size = 1, alpha = 0.7) +
   scale_color_viridis_c(option = "turbo", labels = scales::dollar) +
   labs(
-    title = "Distribution of Home Prices in Philadelphia",
+    title = "Distribution of Sale Prices in Philadelphia",
     color = "Home Price"
   ) +
   theme_minimal()
