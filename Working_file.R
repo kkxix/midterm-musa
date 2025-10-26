@@ -11,6 +11,8 @@ library(knitr)
 library(ggplot2)
 library(stringr)
 library(units)
+library(stargazer)
+library(car)
 
 #PHASE 1: DATA PREPARATION
 
@@ -38,6 +40,7 @@ ggplot(property_sales_res, aes(x = number_of_bedrooms, y = sale_price_n)) +
 
 #Converting blank cells to NA
 colSums(property_sales_res == "")
+
 
 property_sales_res <- as.data.frame(lapply(property_sales_res, function(x) {
   x <- trimws(x)  # remove leading/trailing spaces
@@ -362,15 +365,23 @@ res_properties_sf <- res_properties_sf %>%
 
 # convert variables to numeric for later
 res_properties_sf <- res_properties_sf %>%
-  mutate(total_livable_area = as.numeric(total_livable_area))
+  mutate(total_livable_area = as.numeric(total_livable_area),
+         number_of_bathrooms = as.numeric(number_of_bathrooms),
+         frontage = as.numeric(frontage),
+         fireplaces = as.numeric(fireplaces)
+         )
+
+#create categorical variables 
+res_properties_sf$quality_grade <- as.factor(res_properties_sf$quality_grade)
+res_properties_sf$category_code <- as.factor(res_properties_sf$category_code)
 
 res_properties_sf <- res_properties_sf %>%
-  mutate(number_of_bathrooms = as.numeric(number_of_bathrooms))
 
 # log to reduce skew - compresses large values to make more symmetrical  
 res_properties_sf <- res_properties_sf %>%
   mutate(log_price = log(sale_price_n))
 
+#feature sets####
 # structural features
 structural_features <- res_properties_sf %>%
   select(log_price, number_of_bedrooms, number_of_bathrooms,total_livable_area)
@@ -387,24 +398,50 @@ spatial_features <- res_properties_sf %>%
          nearest_park_mi, nearest_hospital_mi, nearest_fmarket_mi, nearest_landmark_mi, nearest_school_mi, 
          n_parks_near, n_schools_near, n_fmarkets_near, n_hospitals_near, n_landmarks_near, access_index)
 
+#models####
 # structural model
-structural_model <- lm(log_price ~ number_of_bedrooms + number_of_bathrooms + total_livable_area,
+structural_model <- lm(log_price ~ number_of_bedrooms + number_of_bathrooms + total_livable_area
+                      + fireplaces,
                        data = res_properties_sf)
 
 # census model
 census_model <- lm(log_price ~ number_of_bedrooms + number_of_bathrooms + total_livable_area + 
-                   median_h_incomeE + total_populationE,
+                     fireplaces + median_h_incomeE + total_populationE +price_to_income,
                    data = res_properties_sf)
 
 # spatial model
 spatial_model <- lm(log_price ~ number_of_bedrooms + number_of_bathrooms + total_livable_area + 
-                    median_h_incomeE + total_populationE +
+                      fireplaces + median_h_incomeE + total_populationE + price_to_income+
                     nearest_park_mi + nearest_hospital_mi + nearest_fmarket_mi + nearest_landmark_mi + nearest_school_mi + 
                     n_parks_near + n_schools_near + n_fmarkets_near + n_hospitals_near + n_landmarks_near + access_index,
                     data = res_properties_sf)
 
+fixed_effects_interation_model <- lm(log_price ~ number_of_bedrooms + number_of_bathrooms + 
+                                       total_livable_area * median_h_incomeE + 
+                                       as.numeric(year_built)*median_h_incomeE + 
+                            fireplaces + total_populationE + price_to_income+
+                            nearest_park_mi + nearest_hospital_mi + nearest_fmarket_mi + nearest_landmark_mi + nearest_school_mi + 
+                            n_parks_near + n_schools_near + n_fmarkets_near + n_hospitals_near + n_landmarks_near + access_index +
+                            category_code,
+                          data = res_properties_sf)
+
+
 summary(structural_model)
 summary(census_model)
 summary(spatial_model)
+summary(fixed_effects_interation_model)
+
+
+vif(fixed_effects_interation_model)
+
+stargazer(structural_model, census_model, spatial_model, fixed_effects_interation_model, type = "text",
+          star.cutoffs = c(0.05, 0.01, 0.001))
 
 # 5 Creative Visualization
+
+### Phase 5: Model Validation
+
+**Use 10-fold cross-validation:**
+  - Compare all 4 models
+- Report RMSE, MAE, R² for each
+- Create predicted vs. actual plot
