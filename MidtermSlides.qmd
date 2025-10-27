@@ -45,6 +45,8 @@ Develop a predictive model that:
 | + Spatial | 0.52 | 0.62 | 0.36 |
 | + Fixed Effects | **0.50** | **0.65** | **0.34** |
 
+RMSE = ~$162,500
+
 Each added feature layer improves predictions.
 
 # Top Predictors
