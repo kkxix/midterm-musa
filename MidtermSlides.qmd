@@ -50,7 +50,7 @@ Each added feature layer improves predictions.
 # Top Predictors
 -   Median Household Income
 -   Total Liveable Area
--   Proximity to Parks' Properties
+-   Proximity to Hospitals, Schools, and Farmer's Markets
 
 # Residuals by Location
 ![](images/ResidualsAcross.png)
