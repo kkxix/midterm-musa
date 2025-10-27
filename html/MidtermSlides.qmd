@@ -1,0 +1,67 @@
+---
+title: "Philadelphia Housing Price Prediction"
+subtitle: "MUSA 5080 Midterm Challenge"
+author: "AKH Consultants - Annalise Abraham, Katie Knox, and Hope Levin"
+date: "October 27, 2025"
+format:
+  revealjs:
+    slide-number: true
+    code-line-numbers: false
+    smaller: false
+    transition: fade
+    background-transition: fade
+    toc: false
+---
+
+# Our Goal
+Develop a predictive model that:
+
+-   Accurately estimates home values in Philadelphia
+-   Reflects the spatial, structural, and cultural characteristics in the city
+-   Streamlines processes for the Office of Property Assessment
+
+# Home Prices in PHL
+![](images/ResidentialPropertySales.png)
+
+# Analyzing a Reason
+![](images/Bedrooms.png)
+  
+# Data Sources
+-   Property Sales (2023-2024) - Office of Property Assessment
+-   Demographics (2023) - American Community Survey 5-Year Data
+
+# Spatial Features Explored
+-   Farmer's Markets - OpenDataPhilly (Department of Public Health)
+-   Hospitals - OpenDataPhilly (Department of Public Health)
+-   Landmarks - OpenDataPhilly (Office of Innovation and Technology)
+-   Park Properties - OpenDataPhilly (Philadelphia Parks and Recreation)
+-   Schools - OpenDataPhilly (Department of Planning and Development)
+
+# Comparing Models
+| Model | RMSE | R² | MAE |
+|:--|--:|--:|--:|
+| Structural | 0.73 | 0.24 | 0.52 |
+| + Census | 0.53 | 0.61 | 0.37 |
+| + Spatial | 0.52 | 0.62 | 0.36 |
+| + Fixed Effects | **0.50** | **0.65** | **0.34** |
+
+Each added feature layer improves predictions.
+
+# Top Predictors
+-   Median Household Income
+-   Total Liveable Area
+-   Proximity to Schools and Hospitals Properties
+
+# Residuals by Location
+![](images/ResidualsAcross.png)
+  
+# Recommendations
+-   Integrate spatial and census data into the City's AVM
+-   Reassess neighborhoods regularly to account for gentrification
+
+# Limitations & Next Steps
+**Limitations:** data gaps, time
+
+**Next Steps:** add more spatial variables
+
+# Thank You!
