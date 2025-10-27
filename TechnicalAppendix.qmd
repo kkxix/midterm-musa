@@ -7,6 +7,10 @@ format:
     toc: true
     toc-location: left
     theme: cosmo
+execute:
+  echo: true          # show code in output
+  cache: true         # cache all chunks by default
+  workspace: retain   # use the global R environment
 editor: 
   markdown: 
     wrap: 72
@@ -35,6 +39,7 @@ library(car)
 library(caret)
 library(lmtest)
 library(skimr)
+library(ggfortify)
 ```
 
 ## Clean Property Data
@@ -349,7 +354,7 @@ tails on both sides.
 ```{r}
 res_properties_sf <- res_properties_sf %>%             mutate(number_of_bedrooms = as.numeric(number_of_bedrooms))
 
-ggplot( data = res_properties_sf %\>% filter(!is.na(number_of_bedrooms)), aes(x = number_of_bedrooms, y = sale_price_n) ) + geom_point(color = "steelblue", alpha = 0.6, size = 2) + geom_smooth(method = "lm", color = "darkorange", se = TRUE) + scale_y_continuous(labels = scales::dollar) + labs( title = "Residential Sale Prices by Number of Bedrooms", subtitle = "Data from 2023, 2024 Philadelphia", x = "Number of Bedrooms", y = "Sale Price (USD)" ) + theme_minimal()
+ggplot( data = res_properties_sf %>% filter(!is.na(number_of_bedrooms)), aes(x = number_of_bedrooms, y = sale_price_n) ) + geom_point(color = "steelblue", alpha = 0.6, size = 2) + geom_smooth(method = "lm", color = "darkorange", se = TRUE) + scale_y_continuous(labels = scales::dollar) + labs( title = "Residential Sale Prices by Number of Bedrooms", subtitle = "Data from 2023, 2024 Philadelphia", x = "Number of Bedrooms", y = "Sale Price (USD)" ) + theme_minimal()
 ```
 
 ### **Interpretation:**
@@ -424,7 +429,7 @@ underfunded areas. The low-income, high price areas could represent
 areas that are quickly gentrifying. Low income residents here are at
 risked of getting pushed out of these neighborhoods.
 
-# #PHASE 3: FEATURE ENGINEERING
+# PHASE 3: FEATURE ENGINEERING
 
 ## Price per Bedroom:
 
@@ -505,10 +510,12 @@ res_properties_sf %>%
 ```{r}
 # convert variables to numeric for later
 
-res_properties_sf <- res_properties_sf %>% mutate(total_livable_area =
-as.numeric(total_livable_area), number_of_bathrooms =
-as.numeric(number_of_bathrooms), frontage = as.numeric(frontage),
-fireplaces = as.numeric(fireplaces), year_built = year_built )
+res_properties_sf <- res_properties_sf %>% 
+  mutate(total_livable_area = as.numeric(total_livable_area), 
+         number_of_bathrooms = as.numeric(number_of_bathrooms), 
+         frontage = as.numeric(frontage),
+         fireplaces = as.numeric(fireplaces), 
+         year_built = as.numeric(year_built) )
 
 #create categorical variables
 res_properties_sf$quality_grade <- as.factor(res_properties_sf$quality_grade)
@@ -582,32 +589,86 @@ n_landmarks_near + access_index + category_code, data =
 res_properties_sf)
 ```
 
+We built our each model with progressively more features in the following categories along with our hypotheses about their interaction with the dependent variable:
+
+1. **Structural features**: These features came from the property sales data, and thus each sale has a unique value for the following variables:
+
+   - *Number of bedrooms and bathrooms*: Higher numbers tends to increase price
+   - *Total livable area*: More livable area tends to increase price
+   - *Fireplaces*: More fireplaces tends to be associated with luxury and thus price
+
+2. **Census features**: These features come from the ACS and are aggregated at the tract level, so each sale may share values with other sales:
+
+   - *Median Household Income*: Higher income areas more likely to afford higher priced properties
+   - *Total Population*: Higher density areas could have more market competition and thus lower prices
+   - *Price to Income*: Computed ratio of sale price to median income, approximating housing affordability 
+
+3. **Spatial features**: These features were created by comparing city features to locations of property sales, so each sale has a unique value:
+
+   - *Nearest Park*: A low number and thus a close park may increase property value
+   - *Nearest Hospital*: A low number and thus close hospital may increase property value
+   - *Nearest Farmer's Market*: Another feature thats nearness may increase value
+   - *Nearest Landmark*: Nearness to landmark could be desirable feature of high value property
+   - *Nearest School*: Nearness to school may increase property value
+   - *Number of Parks Near*: A higher number of parks within .5 mi may increase property value
+   - *Number of Hospitals Near*: Higher number increase property value
+   - *Number of Landmarks Near*: Higher number increase property value
+   - *Number of Farmer's Markets Near*: Higher number increase property value
+   - *Number of Schools Near*: Higher number increase property value
+   - *Access Index*: This incorporates all above features into one score where a higher number indicates higher access to many types of public features and thus may increase property value
+
+4. **Fixed Effects & Interaction terms**:
+
+   - *Total Livable Area x Median Household Income*: More space in a higher income area could increase property value even more than either variable alone
+   - *Year Built x Median Household Income*: An old home in a higher income area may indicate historically significant, high value property rather than 'outdated' and thus lower value
+   - *Category Code*: 1 = Single Family Home, 2 = Multi-Family, 3 = "Mixed Use". This fixed effect should represent the amount of space per household family member and also account for current cultural preferance for single family homes over shared spaces
+
 ## **Stargazer Output**
 
 ```{r}
-stargazer(structural_model, census_model, spatial_model,
-fixed_effects_interation_model, type = "text", star.cutoffs = c(0.05,
-0.01, 0.001))
+suppressWarnings(
+  stargazer(
+    structural_model, census_model, spatial_model, fixed_effects_interation_model,
+    type = "text",
+    star.cutoffs = c(0.05, 0.01, 0.001),
+    title = "Regression Models Comparison"
+  )
+)
 ```
+The Stargazer output sheds some light on the most important variables:
 
-# 5 Creative Visualization
+  - **Positive Coefficients**: An increase in units of these is associated with an increase in property sale value to a very high degree of confidence (p-value of less than 2e-16):
+    - number_of_bathrooms
+    - total_livable_area
+    - median_h_incomeE
+    - year_built
+    - price_to_income
+    - nearest_fmarket_mi (although here a high value is associated with farther distance from a farmer's market)
+    - n_fmarkets_near (oddly, seeing as farther distance form farmer's marker is modeled as depressing value, here higher number of close farmer's markets is positively associated with value)
+    - n_hospitals_near
+  - **Negative Coefficients**: An increase in units of these is associated with a decrease in property sale value to a very high degree of confidence (p-value of less than 2e-16):
+    - n_schools_near
+    - category_code2 (multi-family housing as compared to single family housing depressed property sale value)
+    - total_livable_area\*median_h_incomeE
+    - median_h_incomeE\*year_built
 
-### Phase 5: Model Validation
+# PHASE 5: MODEL VALIDATION
 
-train_control \<- trainControl(method = "cv", number = 10)
+```{r}
+train_control <- trainControl(method = "cv", number = 10)
 
-cv.mod.1 \<- train(log_price \~ number_of_bedrooms +
+cv.mod.1 <- train(log_price ~ number_of_bedrooms +
 number_of_bathrooms + total_livable_area + fireplaces, data =
 res_properties_sf, method = "lm", trControl = train_control, na.action =
 na.omit)
 
-cv.mod.2 \<- train(log_price \~ number_of_bedrooms +
+cv.mod.2 <- train(log_price ~ number_of_bedrooms +
 number_of_bathrooms + total_livable_area + fireplaces +
 median_h_incomeE + total_populationE +price_to_income, data =
 res_properties_sf, method = "lm", trControl = train_control, na.action =
 na.omit)
 
-cv.mod.3 \<- train(log_price \~ number_of_bedrooms +
+cv.mod.3 <- train(log_price ~ number_of_bedrooms +
 number_of_bathrooms + total_livable_area + fireplaces +
 median_h_incomeE + total_populationE + price_to_income+
 nearest_park_mi + nearest_hospital_mi + nearest_fmarket_mi +
@@ -616,9 +677,9 @@ n_schools_near + n_fmarkets_near + n_hospitals_near + n_landmarks_near +
 access_index, data = res_properties_sf, method = "lm", trControl =
 train_control, na.action = na.omit)
 
-cv.mod.4 \<- train(log_price \~ number_of_bedrooms +
-number_of_bathrooms + total_livable_area \* median_h_incomeE +
-year_built\*median_h_incomeE + fireplaces + total_populationE +
+cv.mod.4 <- train(log_price ~ number_of_bedrooms +
+number_of_bathrooms + total_livable_area * median_h_incomeE +
+year_built*median_h_incomeE + fireplaces + total_populationE +
 price_to_income+ nearest_park_mi + nearest_hospital_mi +
 nearest_fmarket_mi + nearest_landmark_mi + nearest_school_mi +
 n_parks_near + n_schools_near + n_fmarkets_near + n_hospitals_near +
@@ -626,72 +687,123 @@ n_landmarks_near + access_index + category_code, data =
 res_properties_sf, method = "lm", trControl = train_control, na.action =
 na.omit)
 
-cv.mod.1$results
-cv.mod.2$results cv.mod.3$results
-cv.mod.4$results
+#table of models' stats 
+metrics_mod1 <- cv.mod.1$results[1, c("RMSE", "Rsquared", "MAE")]
+metrics_mod1$model <- "Structural Model"
 
-#table of models' stats metrics_mod1 \<-
-cv.mod.1$results[1, c("RMSE", "Rsquared", "MAE")]
-metrics_mod1$model \<- "Structural Model"
+metrics_mod2 <- cv.mod.2$results[1, c("RMSE", "Rsquared", "MAE")]
+metrics_mod2$model <- "Structural + Census Model"
 
-metrics_mod2 \<- cv.mod.2$results[1, c("RMSE", "Rsquared", "MAE")]
-metrics_mod2$model \<- "Structural + Census Model"
+metrics_mod3 <- cv.mod.3$results[1, c("RMSE", "Rsquared", "MAE")]
+metrics_mod3$model <- "Structural + Census + Spatial Model"
 
-metrics_mod3 \<- cv.mod.3$results[1, c("RMSE", "Rsquared", "MAE")]
-metrics_mod3$model \<- "Structural + Census + Spatial Model"
-
-metrics_mod4 \<- cv.mod.4$results[1, c("RMSE", "Rsquared", "MAE")]
-metrics_mod4$model \<- "Structural + Census + Spatial + Fixed Effects &
+metrics_mod4 <- cv.mod.4$results[1, c("RMSE", "Rsquared", "MAE")]
+metrics_mod4$model <- "Structural + Census + Spatial + Fixed Effects &
 Interactions Model"
 
-metrics_table \<- bind_rows(metrics_mod1, metrics_mod2, metrics_mod3,
+metrics_table <- bind_rows(metrics_mod1, metrics_mod2, metrics_mod3,
 metrics_mod4)
 
-kable(metrics_table, "html") %\>% kable_styling(full_width = FALSE)
+kable(
+  metrics_table, 
+  col.names = c("RMSE", "R-Squared", "MAE", "Model Name"),
+  caption = "How Well do Four Models Explain Variance of Property Sale Data?",
+  "html") %>% kable_styling(full_width = FALSE)
+```
 
-#plot fit vs residuals#### resid.1 \<- data.frame( fitted =
-fitted(cv.mod.1$finalModel),
-  residuals = resid(cv.mod.1$finalModel) )
+```{r}
+#plot fit vs residuals#### 
+resid.1 <- data.frame( 
+  fitted = fitted(cv.mod.1$finalModel),
+  residuals = resid(cv.mod.1$finalModel) 
+  )
 
 ggplot(resid.1, aes(x = fitted, y = residuals)) + geom_point() +
 geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
 labs(title = "Residual Plot", x = "Fitted Values", y = "Residuals") +
 theme_minimal()
+```
 
-resid.2 \<- data.frame( fitted = fitted(cv.mod.2$finalModel),
+```{r}
+resid.2 <- data.frame( fitted = fitted(cv.mod.2$finalModel),
   residuals = resid(cv.mod.2$finalModel) )
 
 ggplot(resid.2, aes(x = fitted, y = residuals)) + geom_point() +
 geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
 labs(title = "Residual Plot", x = "Fitted Values", y = "Residuals") +
 theme_minimal()
+```
 
-resid.3 \<- data.frame( fitted = fitted(cv.mod.3$finalModel),
+```{r}
+resid.3 <- data.frame( fitted = fitted(cv.mod.3$finalModel),
   residuals = resid(cv.mod.3$finalModel) )
 
 ggplot(resid.3, aes(x = fitted, y = residuals)) + geom_point() +
 geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
 labs(title = "Residual Plot", x = "Fitted Values", y = "Residuals") +
 theme_minimal()
+```
 
-resid.4 \<- data.frame( fitted = fitted(cv.mod.4$finalModel),
+```{r}
+resid.4 <- data.frame( fitted = fitted(cv.mod.4$finalModel),
   residuals = resid(cv.mod.4$finalModel) )
 
 ggplot(resid.4, aes(x = fitted, y = residuals)) + geom_point() +
 geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
 labs(title = "Residual Plot", x = "Fitted Values", y = "Residuals") +
 theme_minimal()
+```
 
-#plot fitted on map to see location of outliers
-
-preds \<- predict(cv.mod.4, newdata = res_properties_sf)
+```{r}
+preds <- predict(cv.mod.4, newdata = res_properties_sf)
 res_properties_sf$fitted <- NA_real_
-res_properties_sf$residuals \<- NA_real\_
+res_properties_sf$residuals <- NA_real_
 res_properties_sf$fitted[as.numeric(names(preds))] <- preds
-res_properties_sf$residuals\[as.numeric(names(preds))\] \<-
-res_properties_sf\$log_price\[as.numeric(names(preds))\] - preds
+res_properties_sf$residuals[as.numeric(names(preds))] <-
+res_properties_sf$log_price[as.numeric(names(preds))] - preds
 
-res_properties_sf%\>% filter(!is.na(residuals))%\>% ggplot() +
-geom_sf(aes(color = residuals), alpha=.5)+ scale_color_gradient2( low =
-"red", mid = "gray", high = "green", midpoint = 0, name = "Residual
-(log-price)" ) + theme_void()
+res_properties_sf%>% filter(!is.na(residuals))%>% 
+  ggplot() +
+    geom_sf(aes(color = residuals), alpha=.75)+ 
+    scale_color_gradient2( low = "darkred", mid = "lightgray", high = "lightgreen", midpoint = 0, name = "Residual (log-price)")+
+    labs(
+      title = "Map of Residuals",
+      subtitle = str_wrap("Where a positive value indicates an underestimate and a negative value indicates an overestimate"))+
+    theme_void()
+```
+This Map shows the locations of over and underestimates produced by our model. There is a relatively even spread of high absolute value estimates, but overestimates are visually bunched in North Central Philadelphia, and underestimates are clustered in North East and North West, West, and South Philadelphia. This shows that our model could have benefited from a fixed effect accounting for the sector or neighborhood in estimating price, seeing as the areas underestimated are generally considered the wealthier more desirable areas of Philadelphia, and the overestimated areas are generally considered less desirable areas, where reputation may have more influence over property sale price than amenities, structural features, density, income, and affordability. 
+
+# PHASE 6: MODEL DIAGNOSTICS
+
+```{r}
+par(mfrow = c(1, 3))
+
+plot(cv.mod.4$finalModel, which = 1)  # Residuals vs Fitted 
+plot(cv.mod.4$finalModel, which = 2)  # Q-Q 
+plot(cv.mod.4$finalModel, which = 4)  # Cook's distance
+
+
+```
+**Interpretation**: 
+
+  - Residual vs Fitted
+    - This plot shows a down-turned curve, indicating heteroscedasticity, or in other words that the lower and higher end of predictions were more often overestimates. The plot indicates our model could further benefit from quadratic terms. There are also potential extreme outliers that could be removed. 
+  - QQPlot
+    - This plot indicates the distribution of residuals has very a very long left tail. This indicates that the overestimates are more extreme than a normal distribution would have, again with a cluster of extreme outliers. 
+  - Cook's distance
+    - This plot indeed confirms that there are a handful of extreme outliers that are exerting outsize leverage on the model such as observations X2600 and X12295
+    
+In future models, we should not only remove extremely high values (we put a cap at max $10M property sale values) but also we should filter out extremely low property sale values, as they appear to have leverage over the model. We could also investigate if there are terms that should be quadratic given the curved Residual v Fitted plot. 
+
+# PHASE 7: CONCLUSIONS & RECOMMENDATIONS
+
+1. What is your final model's accuracy?
+  - Our final model explains 62% of the variance in the data. 
+2. Which features matter most for Philadelphia prices?
+  - The features that matter the are features such as area, bathrooms, year built, affordability and also interactions between median income, year built, and livable area. The city amenities that matter most for sale price are farmer's markets, hospitals, and shcools, but less so parks and landmarks. An important fixed effect is the designation of single family home or multi family home, with multi family home exerting a negative effect on sale price compared to single family homes 
+3. Which neighborhoods are hardest to predict?
+  - North Central Philadelphia exhibited the highest concentration of overestimated home values, and this could be because the stigma associated with North Central Philadelphia causes other factors that normally increase a home value to have less effect. 
+4. Equity concerns?
+  - Given the consistent over-estimation of sale price values in North Central Philadelphia, caution must be exerted in presenting this information. Our map showing income brackets and sale price brackets compared show that North Central has a large concentration of low income and low sale price properties, and thus the inacuracy of predicting the property values in this area could induce overburdening taxes on an already financially burdened area of the city. 
+5. Limitations?
+  - Our model's limitations lie in the outsize influence that a few low sale price properties holds on the model as well as the spatial correlation to under and over estimates. This strongly indicates that accounting for Phidelphia neighborhoods or regions through a fixed effect variable should be considered for further modeling, as this seems like a factor that in many cases matters more than the structural, affordability, or amenity features. 
