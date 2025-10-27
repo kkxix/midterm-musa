@@ -34,6 +34,7 @@ library(stargazer)
 library(car)
 library(caret)
 library(lmtest)
+library(skimr)
 ```
 
 ## Clean Property Data
@@ -161,9 +162,10 @@ dist_matrix_parks <- st_distance(res_properties_sf, park_properties)
 
 park_distance <- function(dist_matrix_parks, k) {
   apply(dist_matrix_parks, 1, function(distances) { 
-  # Sort and take first k, then average   mean(as.numeric(sort(distances)[1:k]))
+    # Sort distances and take the first k, then average
+    mean(as.numeric(sort(distances)[1:k]))
   })
-  }
+}
 
 # Add nearest park distance as a column
 
@@ -178,10 +180,11 @@ dist_matrix_hospitals <- st_distance(res_properties_sf, hospitals)
 # Function to get mean distance to k nearest neighbors
 
 hosp_distance <- function(dist_matrix_hospitals, k) {
-  apply(dist_matrix_hospitals, 1, function(distances) {# Sort and take first k, then average
+  apply(dist_matrix_hospitals, 1, function(distances) {
+    # Sort distances, take the nearest k, then calculate the average
     mean(as.numeric(sort(distances)[1:k]))
   })
-  }
+}
 
 # Add nearest hospital distance as a column
 
@@ -423,11 +426,12 @@ risked of getting pushed out of these neighborhoods.
 
 # #PHASE 3: FEATURE ENGINEERING
 
+## Price per Bedroom:
+
+This measures to what extent a property becomes more valuable based on
+the number of bedrooms it has.
+
 ```{r}
-# some of these aren't spatial - i was playing around with what i could do and didn't want to delete in case they would be helpful in the future
-
-# price per bedroom
-
 res_properties_sf <- res_properties_sf %>%
   mutate(
     sale_price_n = as.numeric(sale_price_n),
@@ -435,41 +439,73 @@ res_properties_sf <- res_properties_sf %>%
   )
 
 res_properties_sf <- res_properties_sf %>% mutate( price_per_bedroom = sale_price_n/number_of_bedrooms)
+```
 
-# home costs relative to income
+## Home Costs Relative to Income:
 
-# lower ratio = affordable housing, higher ratio = expensive housing
+This feature divides the sale price by the median household income of
+the census tract it is in. A lower ratio would indicate more affordable
+housing in the given tract, while a higher ratio would indicate more
+expensive housing.
 
+```{r}
 res_properties_sf <- res_properties_sf %>% mutate( price_to_income = sale_price_n / median_h_incomeE )
+```
 
-# affordability measure
+## Affordability Measure:
 
-# lower score = housing is more affordable, higher score = housing is less affordable
+This feature divides the tract's median household income by the sale
+price. A lower score would indicate the housing is more affordable,
+while a higher score would mean the property is less affordable.
 
+```{r}
 res_properties_sf <- res_properties_sf %>% mutate( affordability = median_h_incomeE / sale_price_n )
+```
 
-# converting nearest_park to have miles
+## Access Index:
 
+This feature creates one general score to indicate access to multiple
+valuable amenities including parks, hospitals, farmers markets,
+landmarks, and schools.A higher score indicates better access.
+
+```{r}
 res_properties_sf <- res_properties_sf %>% mutate( nearest_park_mi = nearest_park / 5280 )
 
-# access index
-
-# lower score = worse access, higher score = better access
-
 res_properties_sf <- res_properties_sf %>% mutate( access_index = ( 1 / nearest_park_mi) + (1 / nearest_hospital_mi) + (1 / nearest_fmarket_mi) + (1/nearest_landmark_mi) + (1/nearest_school_mi) )
+```
 
-# buffers
+## Buffers:
 
+These features use buffers to determine the number of amenities within a
+half mile buffer of each property. The amenities considered are again
+parks, schools, farmers markets, hospitals, and landmarks.
+
+```{r}
 property_buffers <- st_buffer( res_properties_sf, dist = 0.5 * 5280 )
 
 res_properties_sf <- res_properties_sf %>% mutate( n_parks_near = lengths(st_intersects(property_buffers, park_properties)), n_schools_near = lengths(st_intersects(property_buffers, schools)), n_fmarkets_near = lengths(st_intersects(property_buffers, farmers_markets)), n_hospitals_near = lengths(st_intersects(property_buffers, hospitals)), n_landmarks_near = lengths(st_intersects(property_buffers, landmarks)) )
 ```
 
-#PHASE 4: MODEL BUILDING
+## **Summary of Features:**
 
+```{r}
+res_properties_sf %>%
+  st_drop_geometry() %>%
+  select(price_per_bedroom, price_to_income, affordability, nearest_park_mi,
+         nearest_hospital_mi, nearest_fmarket_mi, nearest_landmark_mi,
+         nearest_school_mi, access_index, n_parks_near, n_schools_near,
+         n_fmarkets_near, n_hospitals_near, n_landmarks_near) %>%
+  skim()
+```
+
+# PHASE 4: MODEL BUILDING
+
+## Further data cleaning
+
+```{r}
 # convert variables to numeric for later
 
-res_properties_sf \<- res_properties_sf %\>% mutate(total_livable_area =
+res_properties_sf <- res_properties_sf %>% mutate(total_livable_area =
 as.numeric(total_livable_area), number_of_bathrooms =
 as.numeric(number_of_bathrooms), frontage = as.numeric(frontage),
 fireplaces = as.numeric(fireplaces), year_built = year_built )
@@ -480,42 +516,53 @@ res_properties_sf$category_code <- as.factor(res_properties_sf$category_code)
 
 # log to reduce skew - compresses large values to make more symmetrical
 
-res_properties_sf \<- res_properties_sf %\>% mutate(log_price =
+res_properties_sf <- res_properties_sf %>% mutate(log_price =
 log(sale_price_n))
+```
 
-#feature sets#### \# structural features structural_features \<-
-res_properties_sf %\>% select(log_price, number_of_bedrooms,
+## **Creating Feature Sets**
+
+```{r}
+#Structural features
+
+structural_features <-
+res_properties_sf %>% select(log_price, number_of_bedrooms,
 number_of_bathrooms,total_livable_area)
 
 # census variables features
 
-census_features \<- res_properties_sf %\>% select(log_price,
+census_features <- res_properties_sf %>% select(log_price,
 number_of_bedrooms, number_of_bathrooms,total_livable_area,
 median_h_incomeE, total_populationE)
 
 # spatial features
 
-spatial_features \<- res_properties_sf %\>% select(log_price,
+spatial_features <- res_properties_sf %>% select(log_price,
 number_of_bedrooms, number_of_bathrooms,total_livable_area,
 median_h_incomeE, total_populationE, nearest_park_mi,
 nearest_hospital_mi, nearest_fmarket_mi, nearest_landmark_mi,
 nearest_school_mi, n_parks_near, n_schools_near, n_fmarkets_near,
 n_hospitals_near, n_landmarks_near, access_index)
+```
 
-#models#### \# structural model structural_model \<- lm(log_price \~
+## Building Models
+
+```{r}
+# structural model 
+structural_model <- lm(log_price ~
 number_of_bedrooms + number_of_bathrooms + total_livable_area +
 fireplaces, data = res_properties_sf)
 
 # census model
 
-census_model \<- lm(log_price \~ number_of_bedrooms +
+census_model <- lm(log_price ~ number_of_bedrooms +
 number_of_bathrooms + total_livable_area + fireplaces +
 median_h_incomeE + total_populationE +price_to_income, data =
 res_properties_sf)
 
 # spatial model
 
-spatial_model \<- lm(log_price \~ number_of_bedrooms +
+spatial_model <- lm(log_price ~ number_of_bedrooms +
 number_of_bathrooms + total_livable_area + fireplaces +
 median_h_incomeE + total_populationE + price_to_income+
 nearest_park_mi + nearest_hospital_mi + nearest_fmarket_mi +
@@ -523,23 +570,25 @@ nearest_landmark_mi + nearest_school_mi + n_parks_near +
 n_schools_near + n_fmarkets_near + n_hospitals_near + n_landmarks_near +
 access_index, data = res_properties_sf)
 
-fixed_effects_interation_model \<- lm(log_price \~ number_of_bedrooms +
-number_of_bathrooms + total_livable_area \* median_h_incomeE +
-year_built\*median_h_incomeE + fireplaces + total_populationE +
+# fixed effects interaction model
+
+fixed_effects_interation_model <- lm(log_price ~ number_of_bedrooms +
+number_of_bathrooms + total_livable_area * median_h_incomeE +
+year_built*median_h_incomeE + fireplaces + total_populationE +
 price_to_income+ nearest_park_mi + nearest_hospital_mi +
 nearest_fmarket_mi + nearest_landmark_mi + nearest_school_mi +
 n_parks_near + n_schools_near + n_fmarkets_near + n_hospitals_near +
 n_landmarks_near + access_index + category_code, data =
 res_properties_sf)
+```
 
-summary(structural_model) summary(census_model) summary(spatial_model)
-summary(fixed_effects_interation_model)
+## **Stargazer Output**
 
-vif(fixed_effects_interation_model)
-
+```{r}
 stargazer(structural_model, census_model, spatial_model,
 fixed_effects_interation_model, type = "text", star.cutoffs = c(0.05,
 0.01, 0.001))
+```
 
 # 5 Creative Visualization
 

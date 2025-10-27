@@ -532,6 +532,39 @@ vif(fixed_effects_interation_model)
 stargazer(structural_model, census_model, spatial_model, fixed_effects_interation_model, type = "text",
           star.cutoffs = c(0.05, 0.01, 0.001))
 
+stargazer(
+  model1, model2, model3,
+  omit = c("year_built", "median_h_incomeE:year_built"),
+  omit.labels = c("Year Built Fixed Effects", "Income-Year Interactions")
+)
+
+stargazer(
+  structural_model, 
+  census_model, 
+  spatial_model, 
+  fixed_effects_interation_model,
+  type = "text",   # change to "latex" or "html" for Quarto/LaTeX output
+  title = "Regression Results: Structural, Census, Spatial, and Full Interaction Models",
+  dep.var.labels = "Log of Sale Price",
+  column.labels = c("Structural", "Census", "Spatial", "Full w/FE & Interactions"),
+  keep = c("number_of_bedrooms", "number_of_bathrooms", "total_livable_area", 
+           "fireplaces", "median_h_incomeE", "total_populationE", "price_to_income",
+           "nearest_park_mi", "nearest_hospital_mi", "nearest_fmarket_mi", 
+           "nearest_landmark_mi", "nearest_school_mi", "n_parks_near", 
+           "n_schools_near", "n_fmarkets_near", "n_hospitals_near", 
+           "n_landmarks_near", "access_index"),
+  omit = c("year_built", "median_h_incomeE:year_built", "category_code"),
+  omit.words = c("year_built", "median_h_incomeE:year_built"),
+  add.lines = list(
+    c("Year Built Fixed Effects", "No", "No", "No", "Yes"),
+    c("Category Fixed Effects", "No", "No", "No", "Yes"),
+    c("Income Interactions", "No", "No", "No", "Yes")
+  ),
+  no.space = TRUE,
+  digits = 3,
+  omit.stat = c("f", "ser")  # optional to clean up extra stats
+)
+
 # 5 Creative Visualization
 
 ### Phase 5: Model Validation
