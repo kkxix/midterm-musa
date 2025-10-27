@@ -8,7 +8,7 @@ format:
     slide-number: true
     code-line-numbers: false
     smaller: false
-    transition: fade               # smooth transitions
+    transition: fade
     background-transition: fade
     toc: false
 ---
@@ -20,16 +20,12 @@ Develop a predictive model that:
 -   Reflects the spatial, structural, and cultural characteristics in the city
 -   Streamlines processes for the Office of Property Assessment
 
-# Early Analysis - How are Homes Priced in Philadelphia?
+# Home Prices in PHL
 ![](images/ResidentialPropertySales.png)
-  
-High property sales are clustered in Northwest Philadelphia, especially around Chestnut Hill. Just adjacent, North Philadelphia has some of the lowest recorded prices. 
 
-# Early Analysis - What Contributes to these Prices?
+# Analyzing a Reason
 ![](images/Bedrooms.png)
   
-Based on analysis, sale prices trend higher based on the number of bedrooms
-
 # Data Sources
 -   Property Sales (2023-2024) - Office of Property Assessment
 -   Demographics (2023) - American Community Survey 5-Year Data
@@ -59,8 +55,6 @@ Each added feature layer improves predictions.
 # Residuals by Location
 ![](images/ResidualsAcross.png)
   
-Errors are distributed across neighborhoods (lack of spatial bias) 
-
 # Recommendations
 -   Integrate spatial and census data into the City's AVM
 -   Reassess neighborhoods regularly to account for gentrification
