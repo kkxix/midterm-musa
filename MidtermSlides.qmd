@@ -20,10 +20,10 @@ Develop a predictive model that:
 -   Reflects the spatial, structural, and cultural characteristics in the city
 -   Streamlines processes for the Office of Property Assessment
 
-# How are Homes Priced in Philadelphia?
+# Home Prices in PHL
 ![](images/ResidentialPropertySales.png)
 
-# Attempting to Explain These Prices
+# Analyzing a Reason
 ![](images/Bedrooms.png)
   
 # Data Sources
