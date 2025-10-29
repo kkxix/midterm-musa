@@ -508,8 +508,12 @@ res_properties_sf %>%
 ## Further data cleaning
 
 ```{r}
-# convert variables to numeric for later
+#join income-saleprice categories to sales price data
+res_properties_sf <- res_properties_sf%>%
+  mutate(census_tract = as.numeric(census_tract))%>%
+  left_join(st_drop_geometry(tracts_merged), by="census_tract")
 
+# convert variables to numeric for later
 res_properties_sf <- res_properties_sf %>% 
   mutate(total_livable_area = as.numeric(total_livable_area), 
          number_of_bathrooms = as.numeric(number_of_bathrooms), 
@@ -520,36 +524,15 @@ res_properties_sf <- res_properties_sf %>%
 #create categorical variables
 res_properties_sf$quality_grade <- as.factor(res_properties_sf$quality_grade)
 res_properties_sf$category_code <- as.factor(res_properties_sf$category_code)
+res_properties_sf$bivariate_cat <- as.factor(res_properties_sf$bivariate_cat)
+
+res_properties_sf$bivariate_cat <- relevel(res_properties_sf$bivariate_cat, ref = "Medium Income-Medium Price")
+
 
 # log to reduce skew - compresses large values to make more symmetrical
 
 res_properties_sf <- res_properties_sf %>% mutate(log_price =
 log(sale_price_n))
-```
-
-## **Creating Feature Sets**
-
-```{r}
-#Structural features
-
-structural_features <-
-res_properties_sf %>% select(log_price, number_of_bedrooms,
-number_of_bathrooms,total_livable_area)
-
-# census variables features
-
-census_features <- res_properties_sf %>% select(log_price,
-number_of_bedrooms, number_of_bathrooms,total_livable_area,
-median_h_incomeE, total_populationE)
-
-# spatial features
-
-spatial_features <- res_properties_sf %>% select(log_price,
-number_of_bedrooms, number_of_bathrooms,total_livable_area,
-median_h_incomeE, total_populationE, nearest_park_mi,
-nearest_hospital_mi, nearest_fmarket_mi, nearest_landmark_mi,
-nearest_school_mi, n_parks_near, n_schools_near, n_fmarkets_near,
-n_hospitals_near, n_landmarks_near, access_index)
 ```
 
 ## Building Models
@@ -564,14 +547,14 @@ fireplaces, data = res_properties_sf)
 
 census_model <- lm(log_price ~ number_of_bedrooms +
 number_of_bathrooms + total_livable_area + fireplaces +
-median_h_incomeE + total_populationE +price_to_income, data =
+median_h_incomeE.x + total_populationE.x +price_to_income, data =
 res_properties_sf)
 
 # spatial model
 
 spatial_model <- lm(log_price ~ number_of_bedrooms +
 number_of_bathrooms + total_livable_area + fireplaces +
-median_h_incomeE + total_populationE + price_to_income+
+median_h_incomeE.x + total_populationE.x + price_to_income+
 nearest_park_mi + nearest_hospital_mi + nearest_fmarket_mi +
 nearest_landmark_mi + nearest_school_mi + n_parks_near +
 n_schools_near + n_fmarkets_near + n_hospitals_near + n_landmarks_near +
@@ -580,12 +563,12 @@ access_index, data = res_properties_sf)
 # fixed effects interaction model
 
 fixed_effects_interation_model <- lm(log_price ~ number_of_bedrooms +
-number_of_bathrooms + total_livable_area * median_h_incomeE +
-year_built*median_h_incomeE + fireplaces + total_populationE +
+number_of_bathrooms + total_livable_area * median_h_incomeE.x +
+year_built*median_h_incomeE.x + fireplaces + total_populationE.x +
 price_to_income+ nearest_park_mi + nearest_hospital_mi +
 nearest_fmarket_mi + nearest_landmark_mi + nearest_school_mi +
 n_parks_near + n_schools_near + n_fmarkets_near + n_hospitals_near +
-n_landmarks_near + access_index + category_code, data =
+n_landmarks_near + access_index + category_code + bivariate_cat, data =
 res_properties_sf)
 ```
 
@@ -622,6 +605,7 @@ We built our each model with progressively more features in the following catego
    - *Total Livable Area x Median Household Income*: More space in a higher income area could increase property value even more than either variable alone
    - *Year Built x Median Household Income*: An old home in a higher income area may indicate historically significant, high value property rather than 'outdated' and thus lower value
    - *Category Code*: 1 = Single Family Home, 2 = Multi-Family, 3 = "Mixed Use". This fixed effect should represent the amount of space per household family member and also account for current cultural preferance for single family homes over shared spaces
+   - *Income-Price-Area*: We created a fixed effect variable using our 9 categories of low, middle, and high income x low, middle, and high median property sale value of the census tract. These 9 areas are not necessarily specific contiguous regions or neighborhoods, but we hypothesize this variable approximates and simplifies the factors that go into an area being considered desirable or not. We set the reference variable as the Medium Income x Medium Price category. 
 
 ## **Stargazer Output**
 
@@ -643,14 +627,16 @@ The Stargazer output sheds some light on the most important variables:
     - median_h_incomeE
     - year_built
     - price_to_income
-    - nearest_fmarket_mi (although here a high value is associated with farther distance from a farmer's market)
-    - n_fmarkets_near (oddly, seeing as farther distance form farmer's marker is modeled as depressing value, here higher number of close farmer's markets is positively associated with value)
     - n_hospitals_near
+    - Medium Income-High Price
+    - High Income-High Price
   - **Negative Coefficients**: An increase in units of these is associated with a decrease in property sale value to a very high degree of confidence (p-value of less than 2e-16):
     - n_schools_near
-    - category_code2 (multi-family housing as compared to single family housing depressed property sale value)
-    - total_livable_area\*median_h_incomeE
     - median_h_incomeE\*year_built
+    - Low Income-Low Price                                                                                                            
+    - Medium Income-Low Price
+    - High Income-Low Price
+    - Low Income-High Price
 
 # PHASE 5: MODEL VALIDATION
 
@@ -664,13 +650,13 @@ na.omit)
 
 cv.mod.2 <- train(log_price ~ number_of_bedrooms +
 number_of_bathrooms + total_livable_area + fireplaces +
-median_h_incomeE + total_populationE +price_to_income, data =
+median_h_incomeE.x + total_populationE.x +price_to_income, data =
 res_properties_sf, method = "lm", trControl = train_control, na.action =
 na.omit)
 
 cv.mod.3 <- train(log_price ~ number_of_bedrooms +
 number_of_bathrooms + total_livable_area + fireplaces +
-median_h_incomeE + total_populationE + price_to_income+
+median_h_incomeE.x + total_populationE.x + price_to_income+
 nearest_park_mi + nearest_hospital_mi + nearest_fmarket_mi +
 nearest_landmark_mi + nearest_school_mi + n_parks_near +
 n_schools_near + n_fmarkets_near + n_hospitals_near + n_landmarks_near +
@@ -678,12 +664,12 @@ access_index, data = res_properties_sf, method = "lm", trControl =
 train_control, na.action = na.omit)
 
 cv.mod.4 <- train(log_price ~ number_of_bedrooms +
-number_of_bathrooms + total_livable_area * median_h_incomeE +
-year_built*median_h_incomeE + fireplaces + total_populationE +
+number_of_bathrooms + total_livable_area * median_h_incomeE.x +
+year_built*median_h_incomeE.x + fireplaces + total_populationE.x +
 price_to_income+ nearest_park_mi + nearest_hospital_mi +
 nearest_fmarket_mi + nearest_landmark_mi + nearest_school_mi +
 n_parks_near + n_schools_near + n_fmarkets_near + n_hospitals_near +
-n_landmarks_near + access_index + category_code, data =
+n_landmarks_near + access_index + category_code  + bivariate_cat, data =
 res_properties_sf, method = "lm", trControl = train_control, na.action =
 na.omit)
 
@@ -771,18 +757,17 @@ res_properties_sf%>% filter(!is.na(residuals))%>%
       subtitle = str_wrap("Where a positive value indicates an underestimate and a negative value indicates an overestimate"))+
     theme_void()
 ```
-This Map shows the locations of over and underestimates produced by our model. There is a relatively even spread of high absolute value estimates, but overestimates are visually bunched in North Central Philadelphia, and underestimates are clustered in North East and North West, West, and South Philadelphia. This shows that our model could have benefited from a fixed effect accounting for the sector or neighborhood in estimating price, seeing as the areas underestimated are generally considered the wealthier more desirable areas of Philadelphia, and the overestimated areas are generally considered less desirable areas, where reputation may have more influence over property sale price than amenities, structural features, density, income, and affordability. 
+This Map shows the locations of over and underestimates produced by our model. There is a relatively even spread of high absolute value estimates, but overestimates are visually bunched in North Central Philadelphia, and underestimates, which are less common and less sever, are clustered in North East and North West, West, and South Philadelphia. This shows that our model could have benefited from perhaps using a fixed effect accounting the neighborhood names that people actually use when buying and selling property, rather than our super categories based on income and price. We also see that residuals are mostly negative, and we could have also benefited from filtering out abnormally low property sale values that might be dragging the model down.
 
 # PHASE 6: MODEL DIAGNOSTICS
 
 ```{r}
+#| fig.show: 'hold'
+
 par(mfrow = c(1, 3))
-
-plot(cv.mod.4$finalModel, which = 1)  # Residuals vs Fitted 
-plot(cv.mod.4$finalModel, which = 2)  # Q-Q 
-plot(cv.mod.4$finalModel, which = 4)  # Cook's distance
-
-
+plot(cv.mod.4$finalModel, which = 1)
+plot(cv.mod.4$finalModel, which = 2)
+plot(cv.mod.4$finalModel, which = 4)
 ```
 **Interpretation**: 
 
@@ -791,18 +776,18 @@ plot(cv.mod.4$finalModel, which = 4)  # Cook's distance
   - QQPlot
     - This plot indicates the distribution of residuals has very a very long left tail. This indicates that the overestimates are more extreme than a normal distribution would have, again with a cluster of extreme outliers. 
   - Cook's distance
-    - This plot indeed confirms that there are a handful of extreme outliers that are exerting outsize leverage on the model such as observations X2600 and X12295
+    - This plot indeed confirms that there are a handful of extreme outliers that are exerting outsize leverage on the model such as observations X12296, X12297, and X12298
     
 In future models, we should not only remove extremely high values (we put a cap at max $10M property sale values) but also we should filter out extremely low property sale values, as they appear to have leverage over the model. We could also investigate if there are terms that should be quadratic given the curved Residual v Fitted plot. 
 
 # PHASE 7: CONCLUSIONS & RECOMMENDATIONS
 
 1. What is your final model's accuracy?
-  - Our final model explains 62% of the variance in the data. 
+  - Our final model explains 65% of the variance in the data. 
 2. Which features matter most for Philadelphia prices?
-  - The features that matter the are features such as area, bathrooms, year built, affordability and also interactions between median income, year built, and livable area. The city amenities that matter most for sale price are farmer's markets, hospitals, and shcools, but less so parks and landmarks. An important fixed effect is the designation of single family home or multi family home, with multi family home exerting a negative effect on sale price compared to single family homes 
+  - The features that matter the are features such as area, bathrooms, year built, affordability and also interactions between median income, year built, and livable area. The city amenities that matter most for sale price are hospitals, and schools, but less so parks and landmarks. The income-price area categories as compared to middle income x middle price areas are also all very significant in our model. 
 3. Which neighborhoods are hardest to predict?
-  - North Central Philadelphia exhibited the highest concentration of overestimated home values, and this could be because the stigma associated with North Central Philadelphia causes other factors that normally increase a home value to have less effect. 
+  - North Central Philadelphia exhibited the highest concentration of overestimated home values, and this could be because the stigma associated with North Central Philadelphia causes other factors that normally increase a home value to have less effect that we have already controlled for.  
 4. Equity concerns?
   - Given the consistent over-estimation of sale price values in North Central Philadelphia, caution must be exerted in presenting this information. Our map showing income brackets and sale price brackets compared show that North Central has a large concentration of low income and low sale price properties, and thus the inacuracy of predicting the property values in this area could induce overburdening taxes on an already financially burdened area of the city. 
 5. Limitations?
