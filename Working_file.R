@@ -67,7 +67,7 @@ philadelphia <- get_acs(
   geometry = TRUE
 )
 
-# Load Spatial Amenities Data
+# Load Spatial Amenities Dataz
 park_properties <- st_read("https://hub.arcgis.com/api/v3/datasets/d52445160ab14380a673e5849203eb64_0/downloads/data?format=geojson&spatialRefId=4326&where=1%3D1")
 hospitals <- st_read("https://opendata.arcgis.com/datasets/df8dc18412494e5abbb021e2f33057b2_0.geojson")
 farmers_markets <- st_read("https://hub.arcgis.com/api/v3/datasets/0707c1f31e2446e881d680b0a5ee54bc_0/downloads/data?format=geojson&spatialRefId=4326&where=1%3D1")
