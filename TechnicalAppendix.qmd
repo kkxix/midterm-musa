@@ -508,10 +508,16 @@ res_properties_sf %>%
 ## Further data cleaning
 
 ```{r}
+<<<<<<< Updated upstream
 #join income-saleprice categories to sales price data
 res_properties_sf <- res_properties_sf%>%
   mutate(census_tract = as.numeric(census_tract))%>%
   left_join(st_drop_geometry(tracts_merged), by="census_tract")
+=======
+# convert variables to numeric for later
+tracts_merged %>% select(bivariate_cat) %>%
+  left_join(res_properties_sf, .)
+>>>>>>> Stashed changes
 
 # convert variables to numeric for later
 res_properties_sf <- res_properties_sf %>% 
@@ -519,7 +525,7 @@ res_properties_sf <- res_properties_sf %>%
          number_of_bathrooms = as.numeric(number_of_bathrooms), 
          frontage = as.numeric(frontage),
          fireplaces = as.numeric(fireplaces), 
-         year_built = as.numeric(year_built) )
+         year_built = as.numeric(year_built))
 
 #create categorical variables
 res_properties_sf$quality_grade <- as.factor(res_properties_sf$quality_grade)
@@ -568,7 +574,11 @@ year_built*median_h_incomeE.x + fireplaces + total_populationE.x +
 price_to_income+ nearest_park_mi + nearest_hospital_mi +
 nearest_fmarket_mi + nearest_landmark_mi + nearest_school_mi +
 n_parks_near + n_schools_near + n_fmarkets_near + n_hospitals_near +
+<<<<<<< Updated upstream
 n_landmarks_near + access_index + category_code + bivariate_cat, data =
+=======
+n_landmarks_near + access_index + category_code + bivariate_, data =
+>>>>>>> Stashed changes
 res_properties_sf)
 ```
 
