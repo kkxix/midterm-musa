@@ -518,6 +518,9 @@ res_properties_sf <- res_properties_sf%>%
 tracts_merged %>% select(bivariate_cat) %>%
   left_join(res_properties_sf, .)
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -579,7 +582,11 @@ nearest_fmarket_mi + nearest_landmark_mi + nearest_school_mi +
 n_parks_near + n_schools_near + n_fmarkets_near + n_hospitals_near +
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 n_landmarks_near + access_index + category_code + bivariate_cat, data =
+=======
+n_landmarks_near + access_index + category_code + bivariate_, data =
+>>>>>>> Stashed changes
 =======
 n_landmarks_near + access_index + category_code + bivariate_, data =
 >>>>>>> Stashed changes
