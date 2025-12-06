@@ -19,7 +19,7 @@ library(lmtest)
 
 # Phase 1: Eviction Data
 ## Eviction Data - The Eviction Lab, Sourced from Princeton University
-evictions <- st_read(here("data/tract_proprietary_valid_2000_2018_y2024m12.csv"))
+evictions <- st_read(here("~/Documents/GitHub/midterm-musa/Final/data/tract_proprietary_valid_2000_2018_y2024m12.csv"))
 
 phl_evictions <- evictions%>%
   filter(county == "Philadelphia County") %>%
@@ -121,16 +121,33 @@ philadelphia <- get_acs(
   state = "PA",
   variables = variables,
   survey = "acs5",
-  year = 2023,
+  year = 2016,
   output = "wide",
   geometry = TRUE
 ) %>%
   mutate (
     rent_burdened = rent_30_34E + rent_35_39E + rent_40_49E + rent_50_plusE,
-    rent_burden_rate = rent_burdened / rent_totalE
+    rent_burden_rate = rent_burdened / rent_totalE,
+    black_percent = blackE / total_popE
   )
 
 philadelphia <- st_transform(philadelphia, st_crs(properties_sf))
+
+## Map Rent Burden Rate
+rent_burden_map <- philadelphia %>%
+  ggplot() +
+  geom_sf(aes(fill = rent_burden_rate)) +
+  scale_fill_viridis_c(option = "magma", labels = scales::percent) +
+  theme_void() +
+  labs(
+    title = "Rent Burden by Tract",
+    fill = "Rent Burdened Households",
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    plot.margin = margin(10,20,10,10))
+
+rent_burden_map
 
 # Phase 4: Eviction Ratios
 evictions_by_tract <- phl_evictions %>%
@@ -152,26 +169,121 @@ philadelphia$GEOID <- as.character(philadelphia$GEOID)
 tract_data <- philadelphia %>%
   left_join(st_drop_geometry(evictions_by_tract), by = "GEOID")
 
+## Map Judgement and Filing Ratios
+filings_ratio_map <- tract_data %>%
+  filter(!is.na(pct_judgements_filings)) %>%
+  ggplot() +
+  geom_sf(aes(fill = pct_judgements_filings)) +
+  scale_fill_viridis_c(option = "plasma", labels = scales::percent) +
+  theme_void() +
+  labs(
+    title = "Eviction Judgement Ratio by Tract",
+    subtitle = "Philadelphia (2016), The Eviction Lab and ACS",
+    fill = "Judgements / Filings"
+    ) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    plot.margin = margin(10,20,10,10))
+
+threats_ratio_map <- tract_data %>%
+  filter(!is.na(pct_judgements_threats)) %>%
+  ggplot() +
+  geom_sf(aes(fill = pct_judgements_threats)) +
+  scale_fill_viridis_c(option = "plasma", labels = scales::percent) +
+  theme_void() +
+  labs(
+    title = "Eviction Threat Ratio by Tract",
+    subtitle = "Philadelphia (2016), The Eviction Lab and ACS",
+    fill = "Judgements / Threats"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    plot.margin = margin(10,20,10,10))
+
+filings_ratio_map
+threats_ratio_map
+
 # Phase 5: Join Data to Property Data
 properties_with_census <- properties_sf %>%
   st_join(tract_data %>%
-    select(GEOID, pct_judgements_filings, pct_judgements_threats, rent_burden_rate, median_h_incomeE, blackE, total_popE, familiesE)
+    select(GEOID, pct_judgements_filings, pct_judgements_threats, rent_burden_rate, median_h_incomeE, blackE, total_popE, familiesE, black_percent)
 )
-
-summary(properties_with_census$pct_judgements_filings)
-sum(is.na(properties_with_census$pct_judgements_filings))
 
 properties_with_tract <- st_join(properties_sf, tract_data %>% select(GEOID),
                                  join = st_within)
 
 # PHASE 6: Predictive Models
 ## Filings > Judgements
-structural_model <- lm(pct_judgements_filings ~ category_code_description + quality_grade + year_built + total_livable_area,
-               data = properties_with_census)
+properties_clean <- properties_with_census %>%
+  st_drop_geometry() %>%
+  mutate(
+    total_livable_area = as.numeric(total_livable_area),
+    year_built = as.numeric(year_built),
+    rent_burden_rate = as.numeric(rent_burden_rate),
+    median_h_incomeE = as.numeric(median_h_incomeE),
+    familiesE = as.numeric(familiesE),
+    black_percent = as.numeric(black_percent)
+  )
 
-census_model <- lm(pct_judgements_filings ~ category_code_description + quality_grade + year_built + total_livable_area +
-                     rent_burden_rate + median_h_incomeE + familiesE + I(blackE/total_popE),
-                   data = properties_with_census)
+model_data <- properties_clean %>%
+  group_by(GEOID) %>%
+  summarise(
+    pct_judgements_filings = first(pct_judgements_filings),
+    total_livable_area = median(total_livable_area, na.rm = TRUE),
+    median_year_built = median(year_built, na.rm = TRUE),
+    quality_grade = names(sort(table(quality_grade), decreasing = TRUE))[1],
+    category_code_description = names(sort(table(category_code_description), decreasing = TRUE))[1],
+    rent_burden_rate = first(rent_burden_rate),
+    median_h_incomeE = first(median_h_incomeE),
+    familiesE = first(familiesE),
+    black_percent = first(black_percent)
+  )
 
+structural_model <- lm(pct_judgements_filings ~ category_code_description + quality_grade + median_year_built + total_livable_area,
+               data = model_data)
+
+census_model <- lm(pct_judgements_filings ~ category_code_description + quality_grade + median_year_built + total_livable_area +
+                     rent_burden_rate + median_h_incomeE + familiesE + black_percent,
+                   data = model_data)
+  
 summary(structural_model)
 summary(census_model)
+
+stargazer(structural_model, census_model, type = "text",
+          star.cutoffs = c(0.05, 0.01, 0.001))
+
+stargazer(
+  structural_model, census_model,
+  title = "Structural and Census Model Results",
+  type = "text",
+  dep.var.labels = "Judgements/Filings",
+  column.labels = c("Structural", "Census"),
+  keep = c("category_code_description", "quality_grade", "total_livable_area", "year_built", "rent_burden_rate", "median_h_incomeE", "familiesE", "black_percent"),
+  add.lines = list(
+    c("Model Type", "Linear", "Linear")
+  ),
+  no.space = TRUE,
+  digits = 3,
+  omit.stat = c("f", "ser")
+)
+
+# Stargazer Findings
+# Larger properties are less likely to have eviction judgments per filing
+# Family density and race correlate with eviction
+# Property characteristics like grade and type are not predictive
+
+poission_model <- glm(log(pct_judgements_filings + 1) ~ category_code_description + quality_grade + median_year_built + total_livable_area +
+                       rent_burden_rate + median_h_incomeE + familiesE + black_percent,
+                     data = model_data)
+
+summary(poission_model)
+
+overdispersion_ratio <- sum(residuals(poission_model, type = "pearson")^2) / poission_model$df.residual
+overdispersion_ratio
+
+# Poission Findings
+# 16% of variation is explained; 
+# Family density and race correlate are strong predictors
+# Type of housing, housing quality, rent burden rate, and income are not statistically significant
