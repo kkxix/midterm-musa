@@ -299,23 +299,6 @@ stargazer(
 # Family density and race correlate with eviction
 # Property characteristics like grade and type are not predictive
 
-poission_model <- glm(log(pct_judgements_filings + 1) ~ category_code_description + quality_grade + median_year_built + total_livable_area + factor(year) +
-                       rent_burden_rate + median_h_incomeE + familiesE + black_percent,
-                     data = model_data)
-
-summary(poission_model)
-
-overdispersion_ratio <- sum(residuals(poission_model, type = "pearson")^2) / poission_model$df.residual
-overdispersion_ratio
-
-# Poission Findings
-# 16% of variation is explained; 
-# Family density and race correlate are strong predictors
-# Type of housing, housing quality, rent burden rate, and income are not statistically significant
-
-#^^ Not sure poisson makes a lot of sense here 
-
-
 #CROSS VALIDATION####
 
 train_data <- model_data%>%filter(year != "2016")
