@@ -26,7 +26,7 @@ phl_evictions <- evictions%>%
   mutate(
     filings = as.numeric(filings),
     threatened = as.numeric(threatened),
-    judgements = as.numeric(judgements)
+    judgments = as.numeric(judgments)
   )
 
 ## Tract Shapes
@@ -57,24 +57,24 @@ filings_map <- phl_evictions_sf%>%
   geom_sf(aes(fill=filings_bucket))+
   theme_void()
 
-## Judgements Map
-judgements_map <- phl_evictions_sf%>%
+## Judgments Map
+judgments_map <- phl_evictions_sf%>%
   filter(year==2016)%>%
   mutate(
-    judgements = as.numeric(judgements),   # <-- FIX HERE
-    judgements_bucket = cut(
-      judgements,
+    judgments = as.numeric(judgments),   # <-- FIX HERE
+    judgments_bucket = cut(
+      judgments,
       breaks = c(0, 10, 25, 50, 100, Inf),
       labels = c("0–10", "11–25", "26–50", "51–100", "100+"),
       right = FALSE
     )
   ) %>%
   ggplot()+
-  geom_sf(aes(fill=judgements_bucket))+
+  geom_sf(aes(fill=judgments_bucket))+
   theme_void()
 
-## Map Fillings and Judgements Side-by-Side
-filings_map | judgements_map
+## Map Fillings and Judgments Side-by-Side
+filings_map | judgments_map
 
 # Phase 2: Property Data
 ## Property Data - Office of Property Assessment, Sourced from Dr. Elizabeth Delmelle
@@ -155,33 +155,33 @@ evictions_by_tract <- phl_evictions %>%
 #  summarise(
 #    filings = sum(filings, na.rm = TRUE),
 #    threatened = sum(threatened, na.rm = TRUE),
-#    judgements = sum(judgements, na.rm = TRUE)
+#    judgments = sum(judgments, na.rm = TRUE)
 #  ) %>%
   mutate(
-    pct_judgements_filings = ifelse(filings > 0, judgements / filings, NA),
-    pct_judgements_threats = ifelse(threatened > 0, judgements / threatened, NA)
+    pct_judgments_filings = ifelse(filings > 0, judgments / filings, NA),
+    pct_judgments_threats = ifelse(threatened > 0, judgments / threatened, NA)
   ) %>%
   rename(GEOID = fips) 
 #%>%
-#  select(GEOID, pct_judgements_filings, pct_judgements_threats)
+#  select(GEOID, pct_judgments_filings, pct_judgments_threats)
 
 philadelphia$GEOID <- as.character(philadelphia$GEOID)
 
 tract_data <- philadelphia %>%
   left_join(st_drop_geometry(evictions_by_tract), by = "GEOID")
 
-## Map Judgement and Filing Ratios
+## Map Judgment and Filing Ratios
 filings_ratio_map <- tract_data %>%
-  filter(!is.na(pct_judgements_filings)) %>%
+  filter(!is.na(pct_judgments_filings)) %>%
   filter(year=="2016")%>%
   ggplot() +
-  geom_sf(aes(fill = pct_judgements_filings)) +
+  geom_sf(aes(fill = pct_judgments_filings)) +
   scale_fill_viridis_c(option = "plasma", labels = scales::percent) +
   theme_void() +
   labs(
-    title = "Eviction Judgement Ratio by Tract",
+    title = "Eviction Judgment Ratio by Tract",
     subtitle = "Philadelphia (2016), The Eviction Lab and ACS",
-    fill = "Judgements / Filings"
+    fill = "Judgments / Filings"
     ) +
   theme(
     plot.title = element_text(hjust = 0.5),
@@ -189,16 +189,16 @@ filings_ratio_map <- tract_data %>%
     plot.margin = margin(10,20,10,10))
 
 threats_ratio_map <- tract_data %>%
-  filter(!is.na(pct_judgements_threats)) %>%
+  filter(!is.na(pct_judgments_threats)) %>%
   filter(year=="2016")%>%
   ggplot() +
-  geom_sf(aes(fill = pct_judgements_threats)) +
+  geom_sf(aes(fill = pct_judgments_threats)) +
   scale_fill_viridis_c(option = "plasma", labels = scales::percent) +
   theme_void() +
   labs(
     title = "Eviction Threat Ratio by Tract",
     subtitle = "Philadelphia (2016), The Eviction Lab and ACS",
-    fill = "Judgements / Threats"
+    fill = "Judgments / Threats"
   ) +
   theme(
     plot.title = element_text(hjust = 0.5),
@@ -214,10 +214,10 @@ properties_with_census <- properties_sf %>%
     select(GEOID, 
            filings,
            threatened,
-           judgements,
+           judgments,
            year,
-           pct_judgements_filings, 
-           pct_judgements_threats, 
+           pct_judgments_filings, 
+           pct_judgments_threats, 
            rent_burden_rate, 
            median_h_incomeE, 
            blackE, 
@@ -230,7 +230,7 @@ properties_with_tract <- st_join(properties_sf, tract_data %>% select(GEOID),
                                  join = st_within)
 
 # PHASE 6: Predictive Models
-## Filings > Judgements
+## Filings > Judgments
 properties_clean <- properties_with_census %>%
   st_drop_geometry() %>%
   mutate(
@@ -246,9 +246,9 @@ model_data <- properties_clean %>%
   group_by(GEOID, year) %>%
   summarise(
     filings = first(filings),
-    judgements = first(judgements),
+    judgments = first(judgments),
     threatened = first(threatened),
-    pct_judgements_filings = first(pct_judgements_filings),
+    pct_judgments_filings = first(pct_judgments_filings),
     total_livable_area = median(total_livable_area, na.rm = TRUE),
     median_year_built = median(year_built, na.rm = TRUE),
     quality_grade = names(sort(table(quality_grade), decreasing = TRUE))[1],
@@ -260,14 +260,14 @@ model_data <- properties_clean %>%
     total_pop = first(total_popE)
   )
 
-structural_model <- lm(pct_judgements_filings ~ category_code_description + quality_grade + median_year_built + total_livable_area + factor(year),
+structural_model <- lm(pct_judgments_filings ~ category_code_description + quality_grade + median_year_built + total_livable_area + factor(year),
                data = model_data)
 
-census_model <- lm(pct_judgements_filings ~ category_code_description + quality_grade + median_year_built + total_livable_area + factor(year) +
+census_model <- lm(pct_judgments_filings ~ category_code_description + quality_grade + median_year_built + total_livable_area + factor(year) +
                      rent_burden_rate + median_h_incomeE + familiesE + black_percent,
                    data = model_data)
   
-binomial_group_model <- glm(cbind(judgements, filings - judgements) ~ category_code_description + quality_grade + median_year_built + total_livable_area + factor(year) +
+binomial_group_model <- glm(cbind(judgments, filings - judgments) ~ category_code_description + quality_grade + median_year_built + total_livable_area + factor(year) +
                               rent_burden_rate + median_h_incomeE + familiesE + black_percent + total_pop,
                          family = binomial,
                          data = model_data)
@@ -283,7 +283,7 @@ stargazer(
   structural_model, census_model,
   title = "Structural and Census Model Results",
   type = "text",
-  dep.var.labels = "Judgements/Filings",
+  dep.var.labels = "Judgments/Filings",
   column.labels = c("Structural", "Census"),
   keep = c("category_code_description", "quality_grade", "total_livable_area", "year_built", "rent_burden_rate", "median_h_incomeE", "familiesE", "black_percent"),
   add.lines = list(
@@ -299,42 +299,25 @@ stargazer(
 # Family density and race correlate with eviction
 # Property characteristics like grade and type are not predictive
 
-poission_model <- glm(log(pct_judgements_filings + 1) ~ category_code_description + quality_grade + median_year_built + total_livable_area + factor(year) +
-                       rent_burden_rate + median_h_incomeE + familiesE + black_percent,
-                     data = model_data)
-
-summary(poission_model)
-
-overdispersion_ratio <- sum(residuals(poission_model, type = "pearson")^2) / poission_model$df.residual
-overdispersion_ratio
-
-# Poission Findings
-# 16% of variation is explained; 
-# Family density and race correlate are strong predictors
-# Type of housing, housing quality, rent burden rate, and income are not statistically significant
-
-#^^ Not sure poisson makes a lot of sense here 
-
-
 #CROSS VALIDATION####
 
 train_data <- model_data%>%filter(year != "2016")
 test_data <- model_data%>%filter(year == "2016")
 
 #only took out quality grade as it was only variable not significant 
-binomial_cv_model <- glm(cbind(judgements, filings - judgements) ~ category_code_description + median_year_built + total_livable_area +
+binomial_cv_model <- glm(cbind(judgments, filings - judgments) ~ category_code_description + median_year_built + total_livable_area +
                            rent_burden_rate + median_h_incomeE + familiesE + black_percent +total_pop,
                          family = binomial,
                          data = train_data)
 
-test_data$predicted_prob_judgement <- predict(
+test_data$predicted_prob_judgment <- predict(
   binomial_cv_model,
   newdata = test_data,
   type = "response"
 )
 
-test_data$predicted_judgements <- test_data$filings * test_data$predicted_prob_judgement
-test_data$absolute_error <- abs(test_data$predicted_judgements - test_data$judgements)
+test_data$predicted_judgments <- test_data$filings * test_data$predicted_prob_judgment
+test_data$absolute_error <- abs(test_data$predicted_judgments - test_data$judgments)
 mae = mean(test_data$absolute_error,  na.rm = TRUE)
 
 mae
@@ -403,11 +386,11 @@ test_data %>%
 
 #from this, we can see that almost all the the tracts with high error are majority black,
 #the top five also have higher than median census tract population, so this is not likely
-#a result of low population areas. Rather, we see remarkably low actual percent judgement
+#a result of low population areas. Rather, we see remarkably low actual percent judgment
 #filings in the tracts with high error -- they are all in the upper quantile of filings, 
 #so much higher than normal amount of filings, and mostly in the upper quantile or upper half
-#of judgements. This could be a function of limitations on the number of court judgements
-#that can be made a year. Across the four years, the judgement:filing ratio  
+#of judgments. This could be a function of limitations on the number of court judgments
+#that can be made a year. Across the four years, the judgment:filing ratio  
 #hovers around 50%
 
 #looking into how many filings top filers make (although from wrong year, can't find 2016)
