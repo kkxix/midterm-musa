@@ -114,7 +114,18 @@ variables <- c(
   rent_50_plus = "B25070_010"
 )
 
-census_api_key("5a82e243438bea307ae1c04f150d539c4db5fa47", install = FALSE)
+census_api_key("7f3237778c134da68ede6b2dc985410b3788e258", install = FALSE)
+
+Sys.getenv("CENSUS_API_KEY")
+
+test <- get_acs(
+  geography = "state",
+  variables = "B01003_001E",  # total population
+  year = 2019,
+  survey = "acs5",
+  geometry = FALSE
+)
+
 philadelphia <- get_acs(
   geography = "tract",
   county = "Philadelphia",

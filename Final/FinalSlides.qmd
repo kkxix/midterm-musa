@@ -1,0 +1,32 @@
+---
+title: "Philadelphia Housing Price Prediction"
+subtitle: "MUSA 5080 Midterm Challenge"
+author: "AKH Consultants - Annalise Abraham, Katie Knox, and Hope Levin"
+date: "December 8, 2025"
+format:
+  revealjs:
+    slide-number: true
+    code-line-numbers: false
+    smaller: false
+    transition: fade
+    background-transition: fade
+    toc: false
+---
+
+# Policy Context
+
+# Problem Statement
+
+# Data Sources
+
+# Our Model
+
+# Our Model: Negative Binomial Regression
+
+# Results
+
+# Model Performance
+
+# Limitations and Bias Considerations
+
+# Recommendations for Implementation

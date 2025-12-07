@@ -68,7 +68,7 @@ colSums(is.na(property_sales_res))
 ## Load Census Data
 
 ```{r}
-census_api_key("5a82e243438bea307ae1c04f150d539c4db5fa47", install = FALSE) 
+census_api_key("5a82e243438bea307ae1c04f150d539c4db5fa47", install = FALSE)
 philadelphia <- get_acs( geography = "tract", county = "Philadelphia", state = "PA", variables = c(median_h_income = "B19013_001", total_population = "B01003_001"), survey = "acs5", year = 2023, output = "wide", geometry = TRUE )
 ```
 
