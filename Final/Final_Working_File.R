@@ -415,3 +415,6 @@ hotspots_2024<-read_csv("./data/philadelphia_hotspots_media_report.csv")
 filers<- hotspots_2024%>%
   group_by(xplaintiff)%>%
   summarise(count=sum(filings))
+
+#save to rda file
+save(philadelphia, file = "./data/philadelphia_census.rda")
