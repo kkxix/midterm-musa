@@ -1,6 +1,6 @@
 ---
-title: "Philadelphia Housing Model - Technical Appendix"
-author: "AKH Consultants - Annalise Abraham, Katie Knox, and Hope Levin"
+title: "Final Project - Technical Appendix"
+author: "Annalise Abraham, Katie Knox, and Hope Levin"
 format: 
   html:
     code-fold: show
