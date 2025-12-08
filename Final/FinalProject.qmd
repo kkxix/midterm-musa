@@ -1,0 +1,619 @@
+---
+title: "Final Project - Technical Appendix"
+author: "Annalise Abraham, Katie Knox, and Hope Levin"
+date: 10/08/2025
+format: 
+  html:
+    code-fold: show
+    toc: true
+    toc-location: left
+    theme: cosmo
+execute:
+  echo: true
+  cache: true
+  workspace: retain
+editor: 
+  markdown: 
+    wrap: 72
+---
+
+# Executive Summary
+
+This model aims to predict the total number of eviction judgments in
+Philadelphia census tracts. We used a negative binomial regression and
+the following variables: the type of housing, the age of the housing
+stock, total livable area, rent burden rate, median income, household
+size, the percent of the Black population, and total population. The
+Mean Absolute Error was 6.37. From looking at the tracts with the 10
+highest absolute prediction errors, we can see that they are majority
+Black. To reduce the impacts of the racial discrimination involved with
+evictions, the city should focus on monitoring and investigating
+evictions in these high risk areas and encourage rental assistance
+programs in such neighborhoods as well.
+
+# Limitations and Ethical Considerations
+
+We analyzed from 2010 to 2016, but since then the city has established
+certain renter’s protections to limit the threat of evictions. More
+recent data would be helpful to look at to determine which areas are
+currently experiencing higher eviction rates.
+
+It’s also important to consider which groups are left out of this
+research. There are many informal evictions that are not captured in
+court filings. In addition, undocumented immigrants may choose to avoid
+formal proceedings.
+
+This data and research also needs to be framed appropriately in order to
+not encourage harmful stereotypes about groups seen as so called
+‘problem tenants.’
+
+Lastly, the Eviction Lab only recorded filings and judgments for 2010,
+2011, 2012, and 2016. Since then, new renter protections may have
+altered patterns, so updated data would be necessary to reflect current
+conditions.
+
+# Policy Problem
+
+Evictions in Philadelphia disproportionately affect lower-income and
+Black communities, destabilizing families and cultural fabrics, and
+accelerating processes of gentrification and exclusion. Given that the
+city's public agencies have a limited capacity, their ability to
+understand where and who needs support first is limited. This model
+clarifies that problem, by showcasing tracts with high judgment counts.
+
+# Who Benefits from this Model
+
+City Agencies - can monitor high-risk tracks and investigate
+discriminatory patterns in eviction proceedings.
+
+Policy Makers - can create/refine housing policies to reduce inequities
+and better allocate resources
+
+# Policy Recommendations
+
+Expand the "Good Cause" eviction protection to all tenants.
+
+Focus rental assistance, outreach programs, and community engagement to
+tracts identified as high-risk by the model.
+
+Investigate repeat eviction fillings and judgments to expose predatory
+landlords.
+
+Institute affordable housing initiatives and better tenant protections
+to reduce structural eviction risk.
+
+## Packages
+
+```{r}
+library(sf)
+library(tidyverse)
+library(tigris)
+library(tidycensus)
+library(scales)
+library(patchwork)
+library(here)
+library(dplyr)
+library(knitr)
+library(kableExtra)
+library(ggplot2)
+library(stringr)
+library(units)
+library(stargazer)
+library(car)
+library(caret)
+library(lmtest)
+
+options(scipen = 999)
+
+load("data/philadelphia_census.rda")
+```
+
+# Phase 1: Eviction Data
+
+## Sourced from The Eviction Lab at Princeton University
+
+The project begins with tract-level eviction data from the Eviction Lab
+at Princeton University, which provides standardized annual counts of
+eviction fillings, judgments, and those with threatened status across
+the US. We filtered the data set to tracts within Philadelphia, which
+provided us with data from the years 2010, 2011, 2012, and 2016. We then
+joined that data to the 2016 Census to produce maps of filings and
+judgments across Philadelphia, which highlighted neighborhood
+disparities and baselined our understanding of the issue.
+
+```{r}
+evictions <- st_read("./data/tract_proprietary_valid_2000_2018_y2024m12.csv")
+
+phl_evictions <- evictions%>%
+  filter(county == "Philadelphia County") %>%
+  mutate(
+    filings = as.numeric(filings),
+    threatened = as.numeric(threatened),
+    judgements = as.numeric(judgements)
+  )
+```
+
+## Load Tract Shapes
+
+```{r}
+tract_shapes <- tracts(
+  state = "PA",
+  county = "Philadelphia",
+  year = 2016,
+  cb = TRUE
+)
+```
+
+## Join Tracts to Evictions
+
+```{r}
+phl_evictions_sf <- tract_shapes %>%
+  inner_join(phl_evictions, by = c("GEOID" = "fips"))
+```
+
+## Filings Map
+
+```{r}
+filings_map <- phl_evictions_sf%>%
+  filter(year==2016)%>%
+  mutate(
+    filings = as.numeric(filings),   # <-- FIX HERE
+    filings_bucket = cut(
+      filings,
+      breaks = c(0, 10, 25, 50, 100, Inf),
+      labels = c("0–10", "11–25", "26–50", "51–100", "100+"),
+      right = FALSE
+    )
+  ) %>%
+  ggplot()+
+  geom_sf(aes(fill=filings_bucket))+
+  theme_void()
+```
+
+## Judgments Map
+
+```{r}
+judgements_map <- phl_evictions_sf%>%
+  filter(year==2016)%>%
+  mutate(
+    judgements = as.numeric(judgements),   # <-- FIX HERE
+    judgements_bucket = cut(
+      judgements,
+      breaks = c(0, 10, 25, 50, 100, Inf),
+      labels = c("0–10", "11–25", "26–50", "51–100", "100+"),
+      right = FALSE
+    )
+  ) %>%
+  ggplot()+
+  geom_sf(aes(fill=judgements_bucket))+
+  theme_void()
+```
+
+Side-by-Side of Maps
+
+```{r}
+filings_map | judgements_map
+```
+
+# Phase 2: Property Data
+
+## Sourced from the City of Philadelphia Office of Property Assessment
+
+To deepen the analysis, we included property data from the Office of
+Property Assessment. Several filters were applied to remove excess data
+to a) help select only residential properties, b) remove irregular
+sales, and c) to reduce the memory use. We then projected everything to
+a consistent CRS. This data will help explain if variations in housing
+stock can be linked to eviction outcomes.
+
+```{r}
+property_sales <- st_read("https://github.com/MUSA-5080-Fall-2025/MUSA-5080-Fall-2025/releases/download/v1.0.0/opa_properties_public.csv")
+
+property_sales_filtered <- property_sales %>% 
+  filter(sale_date >= as.Date("1900-01-01") & sale_date <= as.Date("2025-12-31") ) %>%
+  filter(str_detect(category_code_description, "SINGLE FAMILY") | 
+           str_detect(category_code_description, "MULTI FAMILY") |
+           str_detect(category_code_description, "APARTMENTS > 4 UNITS") |
+           str_detect(category_code_description, "MIXED USE"))
+
+# Remove Unnecessary Columns to Make Easier to Read
+property_sales_filtered <- property_sales_filtered %>%
+  select(category_code_description, quality_grade, year_built, total_livable_area, shape)
+
+## Convert to SF and Fix CRS
+properties_sf <- property_sales_filtered %>%
+  mutate(geometry = st_as_sfc(shape)) %>%
+  st_as_sf()
+
+st_crs(properties_sf) <- 2272
+properties_sf <- st_transform(properties_sf, 4236)
+```
+
+# Phase 3: Census Data
+
+## Sourced from the American Community 5-Year Survey
+
+We then incorporated tract-level data from the 2016 ACS. We chose to
+filter for population (total, families), racial composition (White and
+Black), household income (median), and rent burden. The choice to focus
+on 2016 was intentional, considering the eviction data was last updated
+that year. From there, we calculated the share of rent-burdened
+households and percent Black population, and set everything to the same
+CRS as the property data. With this data, we created a rent burden rate
+map to further our understanding of Philadelphia's neighborhoods- North
+and West Philadelphia had the highest concentrations of rent burdened
+households.
+
+```{r}
+variables <- c(
+  total_population = "B01003_001",
+  median_h_income = "B19013_001",
+  families = "S1101_C01_002",
+  white = "B02001_002",
+  black = "B02001_003",
+  total_pop = "B02001_001",
+  rent_total = "B25070_001",
+  rent_30_34 = "B25070_007",
+  rent_35_39 = "B25070_008",
+  rent_40_49 = "B25070_009",
+  rent_50_plus = "B25070_010"
+)
+
+census_api_key("7f3237778c134da68ede6b2dc985410b3788e258", install = FALSE)
+
+philadelphia <- get_acs(
+  geography = "tract",
+  county = "Philadelphia",
+  state = "PA",
+  variables = variables,
+  survey = "acs5",
+  year = 2016,
+  output = "wide",
+  geometry = TRUE
+) %>%
+  mutate (
+    rent_burdened = rent_30_34E + rent_35_39E + rent_40_49E + rent_50_plusE,
+    rent_burden_rate = rent_burdened / rent_totalE,
+    black_percent = blackE / total_popE
+  )
+
+philadelphia <- st_transform(philadelphia, st_crs(properties_sf))
+```
+
+## Rent Burden Rate Map
+
+```{r}
+rent_burden_map <- philadelphia %>%
+  ggplot() +
+  geom_sf(aes(fill = rent_burden_rate)) +
+  scale_fill_viridis_c(option = "magma", labels = scales::percent) +
+  theme_void() +
+  labs(
+    title = "Rent Burden by Tract",
+    fill = "Rent Burdened Households",
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    plot.margin = margin(10,20,10,10))
+
+rent_burden_map
+```
+
+# Phase 4: Eviction Rates
+
+Here we calculated the share of filings and threatened cases that
+ultimately result in legal judgment, creating ratio maps for filings and
+threatened households. Both maps appear to have the same exact ratios
+for each tract, with the Overbook, Navy Yard, and Andorra neighborhoods
+having a 100% for both. This indicates that our data has outliers.
+Regardless, the patterns from the map distinguish areas, primarily in
+Northeast Philadelphia, with high eviction pressures.
+
+```{r}
+evictions_by_tract <- phl_evictions %>%
+group_by(fips) %>%
+  summarise(
+    filings = sum(filings, na.rm = TRUE),
+    threatened = sum(threatened, na.rm = TRUE),
+    judgements = sum(judgements, na.rm = TRUE),
+    year = first(year)
+  ) %>%
+  mutate(
+    pct_judgements_filings = ifelse(filings > 0, judgements / filings, NA),
+    pct_judgements_threats = ifelse(threatened > 0, judgements / threatened, NA)
+  ) %>%
+  rename(GEOID = fips)
+
+philadelphia$GEOID <- as.character(philadelphia$GEOID)
+
+tract_data <- philadelphia %>%
+  right_join(st_drop_geometry(evictions_by_tract), by = "GEOID")
+```
+
+## Judgment and Filings Ratio Map
+
+```{r}
+filings_ratio_map <- tract_data %>%
+  filter(!is.na(pct_judgements_filings)) %>%
+  ggplot() +
+  geom_sf(aes(fill = pct_judgements_filings)) +
+  scale_fill_viridis_c(option = "plasma", labels = scales::percent) +
+  theme_void() +
+  labs(
+    title = "Eviction Judgment Ratio by Tract",
+    subtitle = "Philadelphia (2016), The Eviction Lab and ACS",
+    fill = "Judgments / Filings"
+    ) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    plot.margin = margin(10,20,10,10))
+
+filings_ratio_map
+```
+
+## Judgment and Threats Ratio Map
+
+```{r}
+threats_ratio_map <- tract_data %>%
+  filter(!is.na(pct_judgements_threats)) %>%
+  ggplot() +
+  geom_sf(aes(fill = pct_judgements_threats)) +
+  scale_fill_viridis_c(option = "plasma", labels = scales::percent) +
+  theme_void() +
+  labs(
+    title = "Eviction Threat Ratio by Tract",
+    subtitle = "Philadelphia (2016), The Eviction Lab and ACS",
+    fill = "Judgments / Threats"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    plot.margin = margin(10,20,10,10))
+
+threats_ratio_map
+```
+
+# Phase 5: Joining Property and Census Data
+
+Within this step, we joined data to attach socioeconomic and eviction
+factors to properties. Doing so creates a unified dataset that captures
+broader neighborhood conditions, an attempt to better understand
+Philadelphia's eviction dynamics at a deeper level. Additionally, these
+combined features will form the foundation for our modeling.
+
+```{r}
+properties_with_census <- properties_sf %>%
+  st_join(tract_data %>%
+    select(GEOID,
+           filings,
+           threatened,
+           judgements,
+           pct_judgements_filings, 
+           pct_judgements_threats, 
+           rent_burden_rate, 
+           median_h_incomeE, 
+           blackE, 
+           total_popE, 
+           familiesE, 
+           black_percent)
+)
+
+properties_with_tract <- st_join(properties_sf, tract_data %>% select(GEOID),
+                                 join = st_within)
+```
+
+# Phase 6: Predictive Models
+
+We built 3 models to understand factors associated with the proportion
+of eviction judgments relative to fillings. The first was a structural
+model using only property characteristics like quality and year built.
+The second was a census model, and the third was a binomial model.
+Results from all three showed that newer, larger properties have
+slightly lower judgment rates, while rent burdened, lower income, and
+lower proportions of Black residents are associated with higher judgment
+rates.
+
+## Data Prep
+
+```{r}
+properties_clean <- properties_with_census %>%
+  st_drop_geometry() %>%
+  mutate(
+    total_livable_area = as.numeric(total_livable_area),
+    year_built = as.numeric(year_built),
+    rent_burden_rate = as.numeric(rent_burden_rate),
+    median_h_incomeE = as.numeric(median_h_incomeE),
+    familiesE = as.numeric(familiesE),
+    black_percent = as.numeric(black_percent)
+  )
+```
+
+## Data Aggregation
+
+```{r}
+model_data <- properties_clean %>%
+  group_by(GEOID) %>%
+  summarise(
+    filings = first(filings),
+    judgments = first(judgements),
+    threatened = first(threatened),
+    pct_judgements_filings = first(pct_judgements_filings),
+    total_livable_area = median(total_livable_area, na.rm = TRUE),
+    median_year_built = median(year_built, na.rm = TRUE),
+    quality_grade = names(sort(table(quality_grade), decreasing = TRUE))[1],
+    category_code_description = names(sort(table(category_code_description), decreasing = TRUE))[1],
+    rent_burden_rate = first(rent_burden_rate),
+    median_h_incomeE = first(median_h_incomeE),
+    familiesE = first(familiesE),
+    black_percent = first(black_percent),
+    total_pop = first(total_popE),
+  )
+```
+
+## Models - Structural, Census, and Binomial
+
+### Structural
+
+```{r}
+structural_model <- lm(pct_judgements_filings ~ category_code_description + quality_grade + median_year_built + total_livable_area,
+               data = model_data)
+```
+
+### Census Model
+
+```{r}
+census_model <- lm(pct_judgements_filings ~ category_code_description + quality_grade + median_year_built + total_livable_area +
+                     rent_burden_rate + median_h_incomeE + familiesE + black_percent,
+                   data = model_data)
+```
+
+### Binomial Model
+
+```{r}
+binomial_group_model <- glm(cbind(judgments, filings - judgments) ~ category_code_description + quality_grade + median_year_built + total_livable_area +
+                              rent_burden_rate + median_h_incomeE + familiesE + black_percent + total_pop,
+                         family = binomial,
+                         data = model_data)
+```
+
+## Model Comparison
+
+```{r}
+stargazer(structural_model, census_model, type = "text",
+          star.cutoffs = c(0.05, 0.01, 0.001))
+
+stargazer(
+  structural_model, census_model,
+  title = "Structural and Census Model Results",
+  type = "text",
+  dep.var.labels = "Judgments/Filings",
+  column.labels = c("Structural", "Census"),
+  keep = c("category_code_description", "quality_grade", "total_livable_area", "year_built", "rent_burden_rate", "median_h_incomeE", "familiesE", "black_percent"),
+  add.lines = list(
+    c("Model Type", "Linear", "Linear")
+  ),
+  no.space = TRUE,
+  digits = 3,
+  omit.stat = c("f", "ser")
+)
+```
+
+# Phase 7: Cross Validation
+
+We then conducted a cross-validation by training the binomial on years
+but 2016, as it was the odd year within the group (2010, 2011, 2012,
+2016), and testing on 2016. This model predicted the number of eviction
+judgments per tract. Tracts with the highest absolute prediction errors
+were almost entirely Black. The top five tracts also populations than
+the city median, suggesting that high error is not due to population.
+These tracts had low actual judgment-to-filing ratios despite having
+filings in the upper quantile, and judgments mostly in the upper
+quantile. This could be a function of limitations on the number of court
+judgments that can be made a year. Across the four years, the
+judgment-filing ratio hovers around 50%, highlight extreme filing
+volumes and constrained capacity drive prediction.
+
+## Split Data
+
+```{r}
+train_data <- model_data
+test_data <- model_data
+```
+
+## Fit Binomial Model
+
+```{r}
+binomial_cv_model <- glm(cbind(judgments, filings - judgments) ~ category_code_description + median_year_built + total_livable_area +
+                           rent_burden_rate + median_h_incomeE + familiesE + black_percent +total_pop,
+                         family = binomial,
+                         data = train_data)
+```
+
+## Predict on Test Data
+
+```{r}
+test_data$predicted_prob_judgment <- predict(
+  binomial_cv_model,
+  newdata = test_data,
+  type = "response"
+)
+
+test_data$predicted_judgments <- test_data$filings * test_data$predicted_prob_judgment
+test_data$absolute_error <- abs(test_data$predicted_judgments - test_data$judgments)
+mae = mean(test_data$absolute_error,  na.rm = TRUE)
+
+mae
+```
+
+## Absolute Error Map
+
+```{r}
+test_data_sf <- test_data %>%
+  left_join(
+    select(philadelphia, GEOID, geometry),  # keep only GEOID and geometry
+    by = "GEOID"
+  ) %>%
+  st_as_sf()
+
+absolute_error_map <- test_data_sf %>%
+  filter(!is.na(absolute_error)) %>%
+  ggplot() +
+  geom_sf(aes(fill = absolute_error)) +
+  scale_fill_viridis_c(option = "plasma") +
+  theme_void() +
+  labs(
+    title = "Absolute Error by Census Tract",
+    subtitle = "Philadelphia (2016), The Eviction Lab and ACS",
+    fill = "Absolute Error"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    plot.margin = margin(10,20,10,10))
+
+absolute_error_map
+```
+
+## Absolute Error Map - Without Outliers
+
+```{r}
+absolute_error_map.2 <- test_data_sf %>%
+  filter(!is.na(absolute_error)) %>%
+  filter(absolute_error<100)%>%
+  ggplot() +
+  geom_sf(aes(fill = absolute_error)) +
+  scale_fill_viridis_c(option = "plasma") +
+  theme_void() +
+  labs(
+    title = "Absolute Error by Census Tract",
+    subtitle = "Philadelphia (2016), The Eviction Lab and ACS",
+    fill = "Absolute Error"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    plot.margin = margin(10,20,10,10))
+
+absolute_error_map.2
+```
+
+## Characteristics of Tracts Worst Predicted
+
+```{r}
+test_data$absolute_error <- unname(test_data$absolute_error)
+
+test_data %>%
+  ungroup() %>%  # remove grouping
+  slice_max(order_by = absolute_error, n = 10, na_rm = TRUE)%>%
+  kable(
+    caption = "Top 10 Tracts by Absolute Prediction Error",
+    digits = 3,                       # format numeric columns
+    align = "c"
+  ) %>%
+  kable_styling(
+    full_width = FALSE,
+    position = "center",
+    bootstrap_options = c("striped", "hover", "condensed")
+  )
+```
