@@ -180,7 +180,7 @@ Errors are evenly distributed, with a few extreme outliers
 ------------------------------------------------------------------------
 
 ::: incremental
--   Expand the "Good Cause" eviction protection to all tenants
+-   Expand the "Good Cause" eviction protection for 1+ year leases
 -   Focus rental assistance, outreach programs, and community engagement to
 tracts identified as high-risk by the model
 -   Dedicate rental assistance programs to high risk areas
