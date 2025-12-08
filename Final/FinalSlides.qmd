@@ -36,7 +36,7 @@ format:
 
 ------------------------------------------------------------------------
 
-## Eviction Filings vs. Judgments
+## The Eviction Process
 
 ::: incremental
 -   Filing - initial legal complaint a landlord submits to the Municipal Courts
@@ -57,7 +57,7 @@ format:
 ## Can We Predict the Number of Eviction Filings That Result in Judgments by Census Tract in Philadelphia?
 
 ::: incremental
--   A higher likelihood of filings resulted in judgements indicates area where landlords are less willing to negotiate outside of court
+-   A higher likelihood of filings resulting in judgements indicates area where landlords are less willing to negotiate outside of court
 -   Tenants in these areas are more likely to experience unfavorable outcomes
 -   Thus, more resources and regulations should target those areas
 :::
@@ -181,9 +181,7 @@ Errors are evenly distributed, with a few extreme outliers
 
 ::: incremental
 -   Expand the "Good Cause" eviction protection for 1+ year leases
--   Focus rental assistance, outreach programs, and community engagement to
-tracts identified as high-risk by the model
--   Dedicate rental assistance programs to high risk areas
+-   Focus outreach programs and community engagement to tracts identified as high-risk by the model
 -   Investigate repeat eviction fillings and judgments to expose predatory
 landlords
 -   Institute affordable housing initiatives and better tenant protections
