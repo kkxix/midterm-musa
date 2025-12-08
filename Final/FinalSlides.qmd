@@ -15,44 +15,184 @@ format:
 
 # Policy Context
 
-## There have been ***11,166*** eviction filings in Philadelphia so far in 2025.
+---
 
-## Over the past 12 months the eviction filing rate has been ***4%***.
+## Evictions are High in Philadelphia
+
+:::{.incremental}
+- There have been ***11,166*** eviction filings in Philadelphia so far in 2025.
+- Over the past 12 months the eviction filing rate has been ***4%***.
+:::
+
+<div style="position:absolute; bottom:1em; right:1em; font-size:0.8em; color:#999;">
+  Source: Eviction Lab
+</div>
+
+---
+
+## Eviction Filings vs Judgements
+
+:::{.incremental}
+- The legal process of eviction involves going to the Municipal Court, filing an eviction, a hearing is scheduled, and eventually a judgement is made. 
+- A lot of filings (about half in our dataset) are settled outside of court between the landlord and tenant
+- The vast majority of filings that go on to a court judgement end up ruling in the landlord's favor
+:::
 
 ###### --Source: Eviction Lab
 
-# The Eviction Filing Rate is Uneven Across Philadelphia
+---
+
+## The Eviction Filing Rate is Uneven Across Philadelphia
 
 ![](Images\Eviction%20Lab_Filing%20Rate%20Map.png) ![](Images\Filing%20Rate_Legend.png)
 
+---
+
 # Problem Statement
 
-## How well can we predict the number of eviction judgments per census tract in Philadelphia?
+---
 
-#### What are the characteristics of the census tracts with the highest share of judgements / filings? 
+## Can we predict the number of eviction filings that will lead to judgments per census tract in Philadelphia?
 
-#### How can the city better protect renters in these high risk areas?
+:::{.incremental}
+- If a is more likely to lead to a judgement it signifies areas where landlords are less willing to negotiate with a tenant outside of court
+- The tenant is more likely for the outcome to not be in their favor
+- Thus more resources and regulations should target those areas 
+:::
+
+---
+
+## Related Questions:
+
+- What are the characteristics of the census tracts with the highest share of judgements / filings? 
+- How can the city better protect renters in these high risk areas?
+
+---
 
 # Data Sources
 
-## Eviction Lab, Philadelphia Eviction Data 2010-2016 (NAME of data set??? Is this fine?) 
+- We use observed and validated eviction filing and judgement data by Philadelphia census tract from [Eviction Lab](https://data-downloads.evictionlab.org/#data-for-analysis/). Data is only available for 2010, 2011, 2012, and 2016. 
+- ACS 2016 5-Year Data
+- Property Sales (2023-2024) - Office of Property Assessment
 
-## ACS 2016 5-Year Data
+---
 
-# Our Model
+# Our Model: Binomial Regression
 
-# Our Model: Negative Binomial Regression
+---
+
+## Given a filing, what is the probability of judgement? --> Binary outcome (judgement or no judgement)
+
+```{r eval=FALSE, echo=TRUE}
+binomial_group_model <- glm(cbind(judgments, filings - judgments) ~ category_code_description + median_year_built + total_livable_area + factor(year) + rent_burden_rate + median_h_incomeE + familiesE + black_percent + total_pop,
+                         family = binomial,
+                         data = model_data)
+```
+
+---
+
+## Key Significant Variables
+
+- ***Dependant Variable***: `(judgments, filings - judgments)` allows us to weight probability of judgement by number of filings in census tract.
+- ***Demographics***: Rent burden, median household income, number of families, percent of balck residents, total population.
+- ***Housing Type***: We used the most common property type per tract by category code, median year built, and total livable area.
+
+---
+
+## Cross Validation
+
+- Train on 2010, 2011, 2012
+- Test on 2016 
+
+---
 
 # Results
 
-# Model Performance
+---
 
-![](Images\Absolute%20Error%20by%20Census%20Tract.png)
+![](Images\probability_of_judgement.png)
+---
+
+## Mean Absolute Error 
+
+- Convert probability into actual predicted judgements: 
+
+`test_data$predicted_judgments <- test_data$filings * test_data$predicted_prob_judgment`
+
+- **MAE: 6.4** 
+- On average, we predict 6 judements wrong based on the number of filings
+
+---
+
+## Map of Absolute Error
+
+Errors are evenly distributed, however there are some extreme outliers
+
+![](Images\absolute_error_by_tract.png)
+--- 
+
+## Examining High Error Tracts {.fit}
+
+<br><br>
+
+<div style="transform: scale(0.8); transform-origin: top left;">
+
+<p style="text-align:center; font-weight:bold;">5 Highest Error Tracts, 2016</p>
+
+| Filings | Judgements | Judgements:Filings | Rent Burden | Median Household Income | Percent Black | Absolute Error |
+|------------|-----------|-----------|------------|-------------|-------------|-------------|
+| 524 | 67 | 13% | 41% | 19k | 63% | 172 |
+| 288 | 60 | 21% | 63% | 19k | 92% | 103 |
+| 396 | 109 | 28% | 51% | 44k | 78% | 79 |
+| 193 | 51 | 26% | 65% | 31k | 64% | 70 |
+| 125 | 33 | 26% | 58% | 25k | 40% | 33 |
+
+</div>
+
+--- 
+
+Compared to Overall Philadelphia, 2016 stats:
+
+<br><br>
+
+<div style="transform: scale(0.8); transform-origin: top left;">
+
+<p style="text-align:center; font-weight:bold;">Philadelphia, 2016</p>
+
+| Filings | Judgements | Judgements:Filings | Rent Burden | Median Household Income | Percent Black |
+|------------|-----------|------------|-------------|-------------|
+| 21,769 | 10,234 | 47% | 51% | 11k - 145k | 43% |
+
+</div>
+
+The high-error tracts have a much lower judgement rate, a low median income, and are majority Black
+
+---
 
 # Limitations and Bias Considerations
 
+---
+
+:::{.incremental}
+- Major policy change since 2016, need more up-to-date data
+- 
+:::
+
+---
+
 # Recommendations for Implementation
 
-## Monitor large landlords in high risk areas 
+---
 
-## Dedicate rental assistance programs to high risk areas
+:::{.incremental}
+1. Monitor large landlords in high risk areas 
+2. Dedicate rental assistance programs to high risk areas
+3. Dedicate legal aid resources to higher judgement-liklihood areas 
+:::
+
+---
+
+# Full Data Citation
+
+- Gromis, Ashley, Ian Fellows, James R. Hendrickson, Lavar Edmonds, Lillian Leung, Adam Porton, and Matthew Desmond. Estimating Eviction Prevalence across the United States. Princeton University Eviction Lab. https://data-downloads.evictionlab.org/#estimating-eviction-prevalance-across-us/. Deposited May 13, 2022.
+

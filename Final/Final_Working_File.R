@@ -297,7 +297,7 @@ stargazer(
 )
 
 # Stargazer Findings
-# Larger properties are less likely to have eviction judgments per filing
+# Larger properties are less likely to have eviction judgements per filing
 # Family density and race correlate with eviction
 # Property characteristics like grade and type are not predictive
 
@@ -307,22 +307,24 @@ train_data <- model_data%>%filter(year != "2016")
 test_data <- model_data%>%filter(year == "2016")
 
 #only took out quality grade as it was only variable not significant 
-binomial_cv_model <- glm(cbind(judgments, filings - judgments) ~ category_code_description + median_year_built + total_livable_area +
+binomial_cv_model <- glm(cbind(judgements, filings - judgements) ~ category_code_description + median_year_built + total_livable_area +
                            rent_burden_rate + median_h_incomeE + familiesE + black_percent +total_pop,
                          family = binomial,
                          data = train_data)
 
-test_data$predicted_prob_judgment <- predict(
+test_data$predicted_prob_judgements <- predict(
   binomial_cv_model,
   newdata = test_data,
   type = "response"
 )
 
-test_data$predicted_judgments <- test_data$filings * test_data$predicted_prob_judgment
-test_data$absolute_error <- abs(test_data$predicted_judgments - test_data$judgments)
+test_data$predicted_judgements <- test_data$filings * test_data$predicted_prob_judgements
+test_data$absolute_error <- abs(test_data$predicted_judgements - test_data$judgements)
 mae = mean(test_data$absolute_error,  na.rm = TRUE)
 
 mae
+
+
 
 test_data_sf <- test_data %>%
   left_join(
@@ -330,6 +332,21 @@ test_data_sf <- test_data %>%
     by = "GEOID"
   ) %>%
   st_as_sf()
+
+## Map Rent Burden Rate
+test_data_sf %>%
+  ggplot() +
+  geom_sf(aes(fill = predicted_prob_judgment)) +
+  scale_fill_viridis_c(option = "magma", labels = scales::percent) +
+  theme_void() +
+  labs(
+    title = "Predicted Probability of Filing Resulting in Judgement",
+    fill = "Probability of Filing Resulting in Judgement",
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    plot.margin = margin(10,20,10,10))
+
 
 absolute_error_map <- test_data_sf %>%
   filter(!is.na(absolute_error)) %>%
