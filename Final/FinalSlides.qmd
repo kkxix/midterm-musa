@@ -17,6 +17,10 @@ format:
 
 # Problem Statement
 
+How well can we predict the number of eviction judgments per census tract in Philadelphia?
+
+What are the characteristics of the census tracts with the highest share of judgements / filings?
+
 # Data Sources
 
 # Our Model

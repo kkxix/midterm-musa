@@ -17,6 +17,8 @@ library(car)
 library(caret)
 library(lmtest)
 
+load("data/philadelphia_census.rda")
+
 # Phase 1: Eviction Data
 ## Eviction Data - The Eviction Lab, Sourced from Princeton University
 evictions <- st_read("./data/tract_proprietary_valid_2000_2018_y2024m12.csv")
@@ -26,7 +28,7 @@ phl_evictions <- evictions%>%
   mutate(
     filings = as.numeric(filings),
     threatened = as.numeric(threatened),
-    judgments = as.numeric(judgments)
+    judgements = as.numeric(judgements)
   )
 
 ## Tract Shapes
@@ -58,23 +60,23 @@ filings_map <- phl_evictions_sf%>%
   theme_void()
 
 ## Judgments Map
-judgments_map <- phl_evictions_sf%>%
+judgements_map <- phl_evictions_sf%>%
   filter(year==2016)%>%
   mutate(
-    judgments = as.numeric(judgments),   # <-- FIX HERE
-    judgments_bucket = cut(
-      judgments,
+    judgements = as.numeric(judgements),   # <-- FIX HERE
+    judgements_bucket = cut(
+      judgements,
       breaks = c(0, 10, 25, 50, 100, Inf),
       labels = c("0–10", "11–25", "26–50", "51–100", "100+"),
       right = FALSE
     )
   ) %>%
   ggplot()+
-  geom_sf(aes(fill=judgments_bucket))+
+  geom_sf(aes(fill=judgements_bucket))+
   theme_void()
 
-## Map Fillings and Judgments Side-by-Side
-filings_map | judgments_map
+## Map Fillings and Judgements Side-by-Side
+filings_map | judgements_map
 
 # Phase 2: Property Data
 ## Property Data - Office of Property Assessment, Sourced from Dr. Elizabeth Delmelle
@@ -116,16 +118,6 @@ variables <- c(
 
 census_api_key("7f3237778c134da68ede6b2dc985410b3788e258", install = FALSE)
 
-Sys.getenv("CENSUS_API_KEY")
-
-test <- get_acs(
-  geography = "state",
-  variables = "B01003_001E",  # total population
-  year = 2019,
-  survey = "acs5",
-  geometry = FALSE
-)
-
 philadelphia <- get_acs(
   geography = "tract",
   county = "Philadelphia",
@@ -162,31 +154,29 @@ rent_burden_map
 
 # Phase 4: Eviction Ratios
 evictions_by_tract <- phl_evictions %>%
-#group_by(fips) %>%
-#  summarise(
-#    filings = sum(filings, na.rm = TRUE),
-#    threatened = sum(threatened, na.rm = TRUE),
-#    judgments = sum(judgments, na.rm = TRUE)
-#  ) %>%
-  mutate(
-    pct_judgments_filings = ifelse(filings > 0, judgments / filings, NA),
-    pct_judgments_threats = ifelse(threatened > 0, judgments / threatened, NA)
+group_by(fips) %>%
+  summarise(
+    filings = sum(filings, na.rm = TRUE),
+    threatened = sum(threatened, na.rm = TRUE),
+    judgements = sum(judgements, na.rm = TRUE)
   ) %>%
-  rename(GEOID = fips) 
-#%>%
-#  select(GEOID, pct_judgments_filings, pct_judgments_threats)
+  mutate(
+    pct_judgements_filings = ifelse(filings > 0, judgements / filings, NA),
+    pct_judgements_threats = ifelse(threatened > 0, judgements / threatened, NA)
+  ) %>%
+  rename(GEOID = fips)
 
 philadelphia$GEOID <- as.character(philadelphia$GEOID)
 
 tract_data <- philadelphia %>%
-  left_join(st_drop_geometry(evictions_by_tract), by = "GEOID")
+  right_join(st_drop_geometry(evictions_by_tract), by = "GEOID")
 
 ## Map Judgment and Filing Ratios
 filings_ratio_map <- tract_data %>%
-  filter(!is.na(pct_judgments_filings)) %>%
-  filter(year=="2016")%>%
+  filter(year==2016) %>%
+  filter(!is.na(pct_judgements_filings)) %>%
   ggplot() +
-  geom_sf(aes(fill = pct_judgments_filings)) +
+  geom_sf(aes(fill = pct_judgements_filings)) +
   scale_fill_viridis_c(option = "plasma", labels = scales::percent) +
   theme_void() +
   labs(
@@ -199,11 +189,12 @@ filings_ratio_map <- tract_data %>%
     plot.subtitle = element_text(hjust = 0.5),
     plot.margin = margin(10,20,10,10))
 
+
 threats_ratio_map <- tract_data %>%
-  filter(!is.na(pct_judgments_threats)) %>%
-  filter(year=="2016")%>%
+  filter(year==2016) %>%
+  filter(!is.na(pct_judgements_threats)) %>%
   ggplot() +
-  geom_sf(aes(fill = pct_judgments_threats)) +
+  geom_sf(aes(fill = pct_judgements_threats)) +
   scale_fill_viridis_c(option = "plasma", labels = scales::percent) +
   theme_void() +
   labs(
@@ -222,13 +213,13 @@ threats_ratio_map
 # Phase 5: Join Data to Property Data
 properties_with_census <- properties_sf %>%
   st_join(tract_data %>%
-    select(GEOID, 
+    select(GEOID,
+           year,
            filings,
            threatened,
-           judgments,
-           year,
-           pct_judgments_filings, 
-           pct_judgments_threats, 
+           judgements,
+           pct_judgements_filings, 
+           pct_judgements_threats, 
            rent_burden_rate, 
            median_h_incomeE, 
            blackE, 
@@ -257,9 +248,9 @@ model_data <- properties_clean %>%
   group_by(GEOID, year) %>%
   summarise(
     filings = first(filings),
-    judgments = first(judgments),
+    judgments = first(judgements),
     threatened = first(threatened),
-    pct_judgments_filings = first(pct_judgments_filings),
+    pct_judgements_filings = first(pct_judgements_filings),
     total_livable_area = median(total_livable_area, na.rm = TRUE),
     median_year_built = median(year_built, na.rm = TRUE),
     quality_grade = names(sort(table(quality_grade), decreasing = TRUE))[1],
@@ -268,13 +259,13 @@ model_data <- properties_clean %>%
     median_h_incomeE = first(median_h_incomeE),
     familiesE = first(familiesE),
     black_percent = first(black_percent),
-    total_pop = first(total_popE)
+    total_pop = first(total_popE),
   )
 
-structural_model <- lm(pct_judgments_filings ~ category_code_description + quality_grade + median_year_built + total_livable_area + factor(year),
+structural_model <- lm(pct_judgements_filings ~ category_code_description + quality_grade + median_year_built + total_livable_area + factor(year),
                data = model_data)
 
-census_model <- lm(pct_judgments_filings ~ category_code_description + quality_grade + median_year_built + total_livable_area + factor(year) +
+census_model <- lm(pct_judgements_filings ~ category_code_description + quality_grade + median_year_built + total_livable_area + factor(year) +
                      rent_burden_rate + median_h_incomeE + familiesE + black_percent,
                    data = model_data)
   
@@ -409,6 +400,3 @@ hotspots_2024<-read_csv("./data/philadelphia_hotspots_media_report.csv")
 filers<- hotspots_2024%>%
   group_by(xplaintiff)%>%
   summarise(count=sum(filings))
-
-#save to rda file
-save(philadelphia, file = "./data/philadelphia_census.rda")
