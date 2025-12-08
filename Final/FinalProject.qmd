@@ -340,7 +340,7 @@ filings_ratio_map <- tract_data %>%
   scale_fill_viridis_c(option = "plasma", labels = scales::percent) +
   theme_void() +
   labs(
-    title = "Eviction Judgment Ratio by Tract",
+    title = "Eviction Judgment / Filings Ratio by Tract",
     subtitle = "Philadelphia (2016), The Eviction Lab and ACS",
     fill = "Judgments / Filings"
     ) +
