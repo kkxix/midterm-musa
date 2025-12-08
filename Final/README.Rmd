@@ -1,0 +1,6 @@
+# MUSA 5080: Public Policy Analytics
+**Final Project • Annalise Abraham, Katie Knox, and Hope Levin**
+
+Our final project is a predictive model that can be used to estimate the number of eviction judgments across Philadelphia's many census tracts. Wtih eviction, property, and census data, we identified high-risk areas and structural disparities to create informed policy.
+
+The MAE was 6.37. Tracts with the highest prediction errors were predominantly Black, highlighting racial disparities present in eviction patterns.
